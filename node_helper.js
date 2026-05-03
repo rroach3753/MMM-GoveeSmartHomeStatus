@@ -76,8 +76,19 @@ module.exports = NodeHelper.create({
     });
 
     req.on("error", function (err) {
+      console.error("[MMM-GoveeSmartHomeStatus] Request error:", err.message);
+      var errorMessage = "Request error: " + err.message;
+      
+      if (err.code === "ENOTFOUND") {
+        errorMessage = "DNS resolution failed for api.govee.com. Check your network connection and firewall settings.";
+      } else if (err.code === "ECONNREFUSED") {
+        errorMessage = "Connection refused by api.govee.com. The API may be temporarily unavailable.";
+      } else if (err.code === "ETIMEDOUT" || err.code === "ECONNRESET") {
+        errorMessage = "Connection timeout. Check your network connection.";
+      }
+      
       self.sendSocketNotification("GOVEE_DEVICES_ERROR", {
-        error: "Request error: " + err.message
+        error: errorMessage
       });
     });
 

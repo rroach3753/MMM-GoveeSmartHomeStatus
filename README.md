@@ -212,6 +212,46 @@ Use the custom mode when your devices use labels like "sconce" or "uplight" and 
 4. Generate an API key
 5. Add it to your module configuration
 
+## Troubleshooting
+
+### DNS Resolution Error: "getaddrinfo ENOTFOUND api.govee.com"
+
+This error indicates your system cannot reach the Govee API server. Try these steps:
+
+1. **Check Network Connectivity**
+   ```bash
+   ping -c 4 api.govee.com
+   nslookup api.govee.com
+   ```
+
+2. **Check Firewall/Network Access**
+   - Ensure your network allows HTTPS (port 443) outbound connections
+   - Check if your ISP or network is blocking access to api.govee.com
+   - Try disabling VPN or proxy if you're using one
+
+3. **Verify DNS Configuration**
+   ```bash
+   cat /etc/resolv.conf
+   ```
+   Ensure you have valid DNS servers configured (e.g., 8.8.8.8, 1.1.1.1)
+
+4. **Test API Connectivity**
+   ```bash
+   curl -H "Govee-Token: YOUR_API_KEY" https://api.govee.com/v1/devices
+   ```
+
+### Invalid API Key Error
+
+- Verify your API key is correct in config.js
+- Check that there are no extra spaces or quotes around the key
+- Regenerate your API key from the Govee app if unsure
+
+### No Devices Displayed
+
+- Verify you have Govee devices added to your account
+- Ensure the devices are online and connected to WiFi
+- Check that your API key has permissions to access device data
+
 ## Dependencies
 
 None - uses Node.js built-in modules (`https`, `url`)
