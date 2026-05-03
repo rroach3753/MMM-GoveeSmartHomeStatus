@@ -10,15 +10,14 @@ A MagicMirror module for displaying Govee smart home device status and informati
 ## Features
 
 - Display list of Govee smart devices with live online and power state
-- Show device type (lights, smart plugs, ice makers, etc.) via Govee device classification
 - Display temperature and humidity when the device reports them
 - Color-coded online/offline status indicators
 - Real-time device list updates
 - Configurable refresh interval
 - Full-width bottom bar layout option for compact device display
 - Lights summary showing on/off counts for detected lights
-- Room summary showing on/total devices by room (lights-only by default)
-- Configurable light detection keywords so you can define what counts as a light
+- Room summary showing on/total devices by room
+- Customizable light detection keywords
 - Appliance hiding with configurable keyword filters (enabled by default)
 
 **Note:** This module now calls both Govee APIs: the device list endpoint and the per-device state endpoint. With large device counts, lower refresh intervals will consume your daily API quota faster.
@@ -56,20 +55,18 @@ Add to your `config.js`:
   config: {
     apiKey: "YOUR_GOVEE_API_KEY",
     title: "Govee Devices",
-      refreshInterval: 480000,        // Refresh every 8 minutes (ms)
-      showOnlineOnly: false,          // Show all devices or only online
-    showDeviceType: true,           // Display device type
-      showPower: true,                // Display live power state when available
-      showTemperature: true,          // Display live temperature when available
-      showHumidity: true,             // Display live humidity when available
-    showLightsSummary: true,        // Show lights count summary
-    showRoomSummary: true,          // Show per-room summary
-    roomSummaryLightsOnly: true,    // Room summary counts only lights
-    useCustomLightDetectionKeywords: true,
+    refreshInterval: 480000,           // Refresh every 8 minutes (ms)
+    showOnlineOnly: false,             // Show all devices or only online
+    showPower: true,                   // Display live power state when available
+    showTemperature: true,             // Display live temperature when available
+    showHumidity: true,                // Display live humidity when available
+    showLightsSummary: true,           // Show lights count summary
+    showRoomSummary: true,             // Show per-room summary
+    roomSummaryLightsOnly: false,      // Include all devices in room summary
     lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led"],
-    hideAppliances: true,           // Hide appliance devices by keyword
+    hideAppliances: true,              // Hide appliance devices by keyword
     hiddenApplianceKeywords: ["ice maker", "fridge"],
-    roomNameDelimiter: " - ",       // Room parsing from device names (e.g. "Kitchen - Lamp")
+    roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -87,14 +84,12 @@ Add to your `config.js`:
 | `title` | String | Module title | `"Govee Devices"` |
 | `refreshInterval` | Number | Refresh interval in milliseconds (0 to disable) | `480000` |
 | `showOnlineOnly` | Boolean | Show only devices currently reporting online | `false` |
-| `showDeviceType` | Boolean | Display device type | `true` |
 | `showPower` | Boolean | Display live power state when available | `true` |
 | `showTemperature` | Boolean | Display live temperature when available | `true` |
 | `showHumidity` | Boolean | Display live humidity when available | `true` |
 | `showLightsSummary` | Boolean | Show total lights count summary | `true` |
 | `showRoomSummary` | Boolean | Show per-room on/total summary | `true` |
-| `roomSummaryLightsOnly` | Boolean | Limit room summary counts to light devices | `true` |
-| `useCustomLightDetectionKeywords` | Boolean | Enable use of `lightDetectionKeywords` list | `true` |
+| `roomSummaryLightsOnly` | Boolean | Limit room summary counts to light devices | `false` |
 | `lightDetectionKeywords` | Array | Case-insensitive keywords used to classify devices as lights | `['light', 'lamp', 'bulb', 'strip', 'led']` |
 | `hideAppliances` | Boolean | Hide appliance-like devices from display | `true` |
 | `hiddenApplianceKeywords` | Array | Case-insensitive keywords used to hide appliances | `['ice maker', 'icemaker', 'refrigerator', 'fridge']` |
@@ -127,7 +122,6 @@ Add to your `config.js`:
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
       fullWidthBottomBar: true,
-      showDeviceType: false,      // Reduce clutter in compact view
       showTemperature: false,
       showHumidity: false
    }
@@ -148,27 +142,9 @@ Add to your `config.js`:
 }
 ```
 
-### Room Summary Includes All Devices
-```javascript
-{
-   module: "MMM-GoveeSmartHomeStatus",
-   position: "top_right",
-   config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
-      showRoomSummary: true,
-      roomSummaryLightsOnly: false
-   }
-}
-```
+## Customizing Light Detection
 
-## How Light Detection Works
-
-The module treats a device as a light when its name, type, or model contains a keyword.
-
-- If `useCustomLightDetectionKeywords: true`, keywords come from `lightDetectionKeywords`.
-- If `useCustomLightDetectionKeywords: false`, built-in defaults are used: `['light', 'lamp', 'bulb', 'strip', 'led']`.
-
-Use the custom mode when your devices use labels like "sconce" or "uplight" and you want summaries to include them.
+The module classifies a device as a light when its name, type, or model contains a keyword from `lightDetectionKeywords`. This is used for the lights summary and for detecting light devices in room summaries.
 
 ### Example: Add custom light keywords
 ```javascript
@@ -177,33 +153,19 @@ Use the custom mode when your devices use labels like "sconce" or "uplight" and 
    position: "top_right",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
-      useCustomLightDetectionKeywords: true,
       lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led", "sconce", "can", "uplight"]
    }
 }
 ```
 
-### Example: Very strict light matching
+### Example: Strict light matching (only certain types)
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
-      useCustomLightDetectionKeywords: true,
       lightDetectionKeywords: ["bulb", "strip"]
-   }
-}
-```
-
-### Example: Disable custom list and use built-in defaults
-```javascript
-{
-   module: "MMM-GoveeSmartHomeStatus",
-   position: "top_right",
-   config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
-      useCustomLightDetectionKeywords: false
    }
 }
 ```

@@ -6,14 +6,12 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     apiKey: "",
     refreshInterval: 480000,
     showOnlineOnly: false,
-    showDeviceType: true,
     showPower: true,
     showTemperature: true,
     showHumidity: true,
     showLightsSummary: true,
     showRoomSummary: true,
-    roomSummaryLightsOnly: true,
-    useCustomLightDetectionKeywords: true,
+    roomSummaryLightsOnly: false,
     lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led"],
     hideAppliances: true,
     hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
@@ -258,12 +256,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   },
 
   isLightDevice: function (device) {
-    var defaultLightKeywords = ["light", "lamp", "bulb", "strip", "led"];
     var haystack = [device.deviceName, device.deviceType, device.model].join(" ").toLowerCase();
-    var useCustomKeywords = this.config.useCustomLightDetectionKeywords === true;
-    var lightKeywords = useCustomKeywords && Array.isArray(this.config.lightDetectionKeywords)
+    var lightKeywords = Array.isArray(this.config.lightDetectionKeywords)
       ? this.config.lightDetectionKeywords
-      : defaultLightKeywords;
+      : ["light", "lamp", "bulb", "strip", "led"];
 
     return lightKeywords.some(function (keyword) {
       return haystack.indexOf(String(keyword || "").toLowerCase()) !== -1;
