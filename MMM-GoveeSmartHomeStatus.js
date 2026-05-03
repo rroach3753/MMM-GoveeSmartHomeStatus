@@ -4,8 +4,12 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   defaults: {
     title: "Govee Devices",
     apiKey: "",
-    refreshInterval: 300000,
+    refreshInterval: 480000,
+    showOnlineOnly: false,
     showDeviceType: true,
+    showPower: true,
+    showTemperature: true,
+    showHumidity: true,
     showLightsSummary: true,
     showRoomSummary: true,
     roomSummaryLightsOnly: true,
@@ -92,6 +96,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
       this.updateDom(300);
     }
+  },
+
+  getStyles: function () {
+    return ["MMM-GoveeSmartHomeStatus.css"];
   },
 
   getDom: function () {
@@ -190,6 +198,30 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       }
       statusDiv.appendChild(badge);
 
+      if (this.config.showPower && typeof device.powerState !== "undefined") {
+        var powerSpan = document.createElement("span");
+        powerSpan.className = "device-detail";
+        powerSpan.textContent = device.powerState ? "On" : "Off";
+        statusDiv.appendChild(document.createElement("br"));
+        statusDiv.appendChild(powerSpan);
+      }
+
+      if (this.config.showTemperature && typeof device.temperature !== "undefined") {
+        var temperatureSpan = document.createElement("span");
+        temperatureSpan.className = "device-detail";
+        temperatureSpan.textContent = "Temp: " + device.temperature;
+        statusDiv.appendChild(document.createElement("br"));
+        statusDiv.appendChild(temperatureSpan);
+      }
+
+      if (this.config.showHumidity && typeof device.humidity !== "undefined") {
+        var humiditySpan = document.createElement("span");
+        humiditySpan.className = "device-detail";
+        humiditySpan.textContent = "Humidity: " + device.humidity + "%";
+        statusDiv.appendChild(document.createElement("br"));
+        statusDiv.appendChild(humiditySpan);
+      }
+
       deviceItem.appendChild(nameDiv);
       deviceItem.appendChild(statusDiv);
       deviceList.appendChild(deviceItem);
@@ -209,6 +241,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   getFilteredDevices: function (devices) {
     return devices.filter(function (device) {
+      if (this.config.showOnlineOnly && device.online === false) {
+        return false;
+      }
+
       if (this.config.hideAppliances && this.isApplianceDevice(device)) {
         return false;
       }

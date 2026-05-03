@@ -9,18 +9,19 @@ A MagicMirror module for displaying Govee smart home device status and informati
 
 ## Features
 
-- Display list of Govee smart devices with device names and types
+- Display list of Govee smart devices with live online and power state
 - Show device type (lights, smart plugs, ice makers, etc.) via Govee device classification
-- Color-coded status indicators (device type icons)
+- Display temperature and humidity when the device reports them
+- Color-coded online/offline status indicators
 - Real-time device list updates
 - Configurable refresh interval
 - Full-width bottom bar layout option for compact device display
-- Lights summary showing count of light devices
+- Lights summary showing on/off counts for detected lights
 - Room summary showing on/total devices by room (lights-only by default)
 - Configurable light detection keywords so you can define what counts as a light
 - Appliance hiding with configurable keyword filters (enabled by default)
 
-**Note:** This module displays device metadata (name, type). Real-time device state (power, temperature, brightness, etc.) requires additional API endpoints. A future version may support fetching current device state via the Get Device State API endpoint.
+**Note:** This module now calls both Govee APIs: the device list endpoint and the per-device state endpoint. With large device counts, lower refresh intervals will consume your daily API quota faster.
 
 ## Installation
 
@@ -55,8 +56,12 @@ Add to your `config.js`:
   config: {
     apiKey: "YOUR_GOVEE_API_KEY",
     title: "Govee Devices",
-    refreshInterval: 300000,        // Refresh every 5 minutes (ms)
+      refreshInterval: 480000,        // Refresh every 8 minutes (ms)
+      showOnlineOnly: false,          // Show all devices or only online
     showDeviceType: true,           // Display device type
+      showPower: true,                // Display live power state when available
+      showTemperature: true,          // Display live temperature when available
+      showHumidity: true,             // Display live humidity when available
     showLightsSummary: true,        // Show lights count summary
     showRoomSummary: true,          // Show per-room summary
     roomSummaryLightsOnly: true,    // Room summary counts only lights
@@ -80,8 +85,12 @@ Add to your `config.js`:
 |--------|------|-------------|---------|
 | `apiKey` | String | Your Govee API key (required) | `""` |
 | `title` | String | Module title | `"Govee Devices"` |
-| `refreshInterval` | Number | Refresh interval in milliseconds (0 to disable) | `300000` |
+| `refreshInterval` | Number | Refresh interval in milliseconds (0 to disable) | `480000` |
+| `showOnlineOnly` | Boolean | Show only devices currently reporting online | `false` |
 | `showDeviceType` | Boolean | Display device type | `true` |
+| `showPower` | Boolean | Display live power state when available | `true` |
+| `showTemperature` | Boolean | Display live temperature when available | `true` |
+| `showHumidity` | Boolean | Display live humidity when available | `true` |
 | `showLightsSummary` | Boolean | Show total lights count summary | `true` |
 | `showRoomSummary` | Boolean | Show per-room on/total summary | `true` |
 | `roomSummaryLightsOnly` | Boolean | Limit room summary counts to light devices | `true` |
@@ -118,7 +127,9 @@ Add to your `config.js`:
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
       fullWidthBottomBar: true,
-      showDeviceType: false      // Reduce clutter in compact view
+      showDeviceType: false,      // Reduce clutter in compact view
+      showTemperature: false,
+      showHumidity: false
    }
 }
 ```
@@ -243,6 +254,13 @@ This error indicates your system cannot reach the Govee API server. Try these st
 - Verify you have Govee devices added to your account
 - Ensure the devices are online and connected to WiFi
 - Check that your API key has permissions to access device data
+- If `hideAppliances` is enabled, appliance-like names such as `ice maker` or `fridge` may be filtered out intentionally
+
+### API Usage Notes
+
+- The module calls the device list endpoint once per refresh plus one state request per returned device
+- Example: 25 devices with an 8 minute refresh interval is about 4,680 requests per day
+- Govee documents a 10,000 request per account per day limit, so avoid very short refresh intervals on larger device lists
 
 ## Dependencies
 

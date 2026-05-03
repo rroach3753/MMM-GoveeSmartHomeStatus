@@ -142,9 +142,14 @@
 
 /* Full-width bottom bar layout */
 .mmm-govee-smartHome.full-width-bottom-bar {
-  padding: 8px 15px;
-  width: 100%;
+  padding: 8px 18px;
+  width: 100vw;
+  max-width: 100vw;
+  position: relative;
+  left: 50%;
+  margin-left: -50vw;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .title {
@@ -152,26 +157,37 @@
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .govee-container {
-  flex-direction: row;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   margin: 0;
+  align-items: stretch;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .device-list {
   flex-direction: row;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .device-list::-webkit-scrollbar {
+  display: none;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .summary-wrap {
   flex-direction: row;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: flex-start;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .summary-section {
   padding: 4px 8px;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .summary-label,
@@ -190,8 +206,9 @@
 .mmm-govee-smartHome.full-width-bottom-bar .device-item {
   padding: 6px 10px;
   font-size: 13px;
-  flex-shrink: 1;
-  min-width: fit-content;
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .device-name {
