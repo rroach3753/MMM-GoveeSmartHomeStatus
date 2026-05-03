@@ -80,9 +80,9 @@ module.exports = NodeHelper.create({
       var errorMessage = "Request error: " + err.message;
       
       if (err.code === "ENOTFOUND") {
-        errorMessage = "DNS resolution failed for api.govee.com. Check your network connection and firewall settings.";
+        errorMessage = "DNS resolution failed for openapi.api.govee.com. Check your network connection and firewall settings.";
       } else if (err.code === "ECONNREFUSED") {
-        errorMessage = "Connection refused by api.govee.com. The API may be temporarily unavailable.";
+        errorMessage = "Connection refused by openapi.api.govee.com. The API may be temporarily unavailable.";
       } else if (err.code === "ETIMEDOUT" || err.code === "ECONNRESET") {
         errorMessage = "Connection timeout. Check your network connection.";
       }
@@ -98,37 +98,25 @@ module.exports = NodeHelper.create({
   processGoveeResponse: function (data) {
     var devices = [];
 
-    if (data.data && Array.isArray(data.data.devices)) {
-      devices = data.data.devices.map(function (device) {
+    if (data.data && Array.isArray(data.data)) {
+      devices = data.data.map(function (device) {
         return {
           deviceId: device.device,
           deviceName: device.deviceName,
-          deviceType: device.deviceType,
-          model: device.sku || device.model,
+          deviceType: device.type,
+          model: device.sku,
           roomName: device.roomName || device.room || "",
-          online: device.online,
-          powerState: this.getPropertyValue(device.properties, "powerSwitch"),
-          temperature: this.getPropertyValue(device.properties, "temperature"),
-          humidity: this.getPropertyValue(device.properties, "humidity"),
-          brightness: this.getPropertyValue(device.properties, "brightness"),
-          colorTemperature: this.getPropertyValue(device.properties, "colorTemperature"),
-          color: this.getPropertyValue(device.properties, "color")
+          online: device.online !== false, // Default to online if not specified
+          powerState: undefined, // Would need separate API call to get current state
+          temperature: undefined,
+          humidity: undefined,
+          brightness: undefined,
+          colorTemperature: undefined,
+          color: undefined
         };
       }.bind(this));
     }
 
     return devices;
-  },
-
-  getPropertyValue: function (properties, propertyName) {
-    if (!properties || !Array.isArray(properties)) {
-      return undefined;
-    }
-
-    var prop = properties.find(function (p) {
-      return p.type === propertyName;
-    });
-
-    return prop ? prop.value : undefined;
   }
 });
