@@ -226,14 +226,10 @@
 
 /* Compact card layout */
 .compact-card-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  max-height: 500px;
-  overflow-y: auto;
-  overflow-x: hidden;
   padding: 8px 0;
-  scroll-behavior: smooth;
 }
 
 .compact-card {
@@ -241,13 +237,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 60px;
-  width: 100%;
-  padding: 8px;
+  min-height: 50px;
+  padding: 6px;
   background-color: rgba(255, 255, 255, 0.05);
   border: 2px solid #666;
   border-radius: 6px;
-  flex-shrink: 0;
   transition: all 0.3s ease;
 }
 
@@ -267,22 +261,22 @@
 }
 
 .compact-card-name {
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
   word-break: break-word;
   color: #ddd;
-  line-height: 1.3;
+  line-height: 1.2;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
+  min-height: 24px;
 }
 
 .compact-card-power {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-align: center;
   color: #4CAF50;
-  margin-top: 4px;
+  margin-top: 2px;
 }
