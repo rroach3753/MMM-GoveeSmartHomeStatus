@@ -173,14 +173,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         deviceItem.classList.add("offline");
       }
 
-      // Device name and type
+      // Device name
       var nameDiv = document.createElement("div");
       nameDiv.className = "device-name";
-      var nameText = device.deviceName || "Unknown Device";
-      if (this.config.showDeviceType && device.deviceType) {
-        nameText += " (" + device.deviceType + ")";
-      }
-      nameDiv.textContent = nameText;
+      nameDiv.textContent = device.deviceName || "Unknown Device";
 
       // Device status
       var statusDiv = document.createElement("div");
