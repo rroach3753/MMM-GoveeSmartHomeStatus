@@ -418,6 +418,11 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       rooms.forEach(function (room) {
         var item = document.createElement("div");
         item.className = "room-summary-item";
+        if (roomCounts[room].on > 0) {
+          item.classList.add("on");
+        } else {
+          item.classList.add("off");
+        }
         item.textContent = room + ": " + roomCounts[room].on + "/" + roomCounts[room].total + " on";
         grid.appendChild(item);
       });

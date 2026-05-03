@@ -135,9 +135,31 @@
   margin-top: 6px;
 }
 
+.room-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 8px;
+  margin-top: 6px;
+}
+
 .room-summary-item {
   font-size: 12px;
   color: #ddd;
+  padding: 4px 6px;
+  border-radius: 3px;
+  text-align: center;
+}
+
+.room-summary-item.on {
+  background-color: rgba(76, 175, 80, 0.15);
+  color: #4CAF50;
+  border: 1px solid #4CAF50;
+}
+
+.room-summary-item.off {
+  background-color: rgba(100, 100, 100, 0.1);
+  color: #999;
+  border: 1px solid #666;
 }
 
 /* Full-width bottom bar layout */
