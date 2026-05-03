@@ -25,7 +25,7 @@ module.exports = NodeHelper.create({
     }
 
     var options = {
-      hostname: "developer.api.govee.com",
+      hostname: "api.govee.com",
       port: 443,
       path: "/v1/devices",
       method: "GET",
