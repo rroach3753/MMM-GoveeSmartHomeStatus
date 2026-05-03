@@ -1,0 +1,22 @@
+{
+  "name": "mmm-goveesmarthomestatus",
+  "version": "1.0.0",
+  "description": "MagicMirror module for displaying Govee smart home device status and control",
+  "main": "MMM-GoveeSmartHomeStatus.js",
+  "license": "MIT",
+  "keywords": [
+    "MagicMirror",
+    "Govee",
+    "Smart Home",
+    "IoT",
+    "Device Status"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rroach3753/MMM-GoveeSmartHomeStatus.git"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "eslint": "^10.3.0"
+  }
+}

@@ -1,0 +1,214 @@
+.mmm-govee-smartHome {
+  padding: 15px;
+  font-family: Roboto, sans-serif;
+  color: #fff;
+}
+
+.mmm-govee-smartHome .message,
+.mmm-govee-smartHome .error {
+  text-align: center;
+  padding: 20px;
+  font-size: 14px;
+}
+
+.mmm-govee-smartHome .error {
+  color: #ff6b6b;
+  background-color: rgba(255, 107, 107, 0.1);
+  border-radius: 4px;
+}
+
+.govee-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.device-item {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid #4CAF50;
+  border-radius: 4px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.device-item.offline {
+  border-left-color: #ff6b6b;
+  opacity: 0.6;
+}
+
+.device-item.error {
+  border-left-color: #ffa500;
+}
+
+.device-name {
+  font-size: 16px;
+  font-weight: 400;
+  flex: 1;
+}
+
+.device-status {
+  font-size: 14px;
+  color: #aaa;
+  margin-left: 10px;
+  text-align: right;
+}
+
+.device-status.on {
+  color: #4CAF50;
+}
+
+.device-status.off {
+  color: #999;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.status-badge.online {
+  background-color: #4CAF50;
+  color: #fff;
+}
+
+.status-badge.offline {
+  background-color: #ff6b6b;
+  color: #fff;
+}
+
+.device-detail {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+
+.summary-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-section {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+.summary-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #bbb;
+}
+
+.summary-value {
+  font-size: 14px;
+  color: #fff;
+}
+
+.room-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+
+.room-summary-item {
+  font-size: 12px;
+  color: #ddd;
+}
+
+/* Full-width bottom bar layout */
+.mmm-govee-smartHome.full-width-bottom-bar {
+  padding: 8px 15px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .title {
+  display: none;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .govee-container {
+  flex-direction: row;
+  gap: 10px;
+  margin: 0;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .device-list {
+  flex-direction: row;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .summary-wrap {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .summary-section {
+  padding: 4px 8px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .summary-label,
+.mmm-govee-smartHome.full-width-bottom-bar .summary-value,
+.mmm-govee-smartHome.full-width-bottom-bar .room-summary-item {
+  font-size: 11px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .room-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .device-item {
+  padding: 6px 10px;
+  font-size: 13px;
+  flex-shrink: 1;
+  min-width: fit-content;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .device-name {
+  font-size: 13px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .device-status {
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .status-badge {
+  padding: 2px 6px;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .device-detail {
+  display: none;
+}
