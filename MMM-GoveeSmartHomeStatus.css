@@ -166,16 +166,10 @@
 .mmm-govee-smartHome.full-width-bottom-bar .device-list {
   flex-direction: row;
   gap: 8px;
-  flex-wrap: nowrap;
-  align-items: center;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-  scrollbar-width: none;
-}
-
-.mmm-govee-smartHome.full-width-bottom-bar .device-list::-webkit-scrollbar {
-  display: none;
+  flex-wrap: wrap;
+  align-items: stretch;
+  overflow: visible;
+  padding-bottom: 0;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .summary-wrap {
