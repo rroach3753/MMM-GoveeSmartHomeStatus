@@ -5,11 +5,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     title: "Govee Devices",
     apiKey: "",
     refreshInterval: 300000,
-    showOnlineOnly: false,
     showDeviceType: true,
-    showPower: true,
-    showTemperature: true,
-    showHumidity: true,
     showLightsSummary: true,
     showRoomSummary: true,
     roomSummaryLightsOnly: true,
@@ -194,33 +190,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       }
       statusDiv.appendChild(badge);
 
-      // Power state
-      if (this.config.showPower && device.powerState !== undefined) {
-        var powerSpan = document.createElement("span");
-        powerSpan.className = "device-detail";
-        powerSpan.textContent = device.powerState ? "On" : "Off";
-        statusDiv.appendChild(document.createElement("br"));
-        statusDiv.appendChild(powerSpan);
-      }
-
-      // Temperature
-      if (this.config.showTemperature && device.temperature !== undefined) {
-        var tempSpan = document.createElement("span");
-        tempSpan.className = "device-detail";
-        tempSpan.textContent = "Temp: " + device.temperature + "°C";
-        statusDiv.appendChild(document.createElement("br"));
-        statusDiv.appendChild(tempSpan);
-      }
-
-      // Humidity
-      if (this.config.showHumidity && device.humidity !== undefined) {
-        var humiditySpan = document.createElement("span");
-        humiditySpan.className = "device-detail";
-        humiditySpan.textContent = "Humidity: " + device.humidity + "%";
-        statusDiv.appendChild(document.createElement("br"));
-        statusDiv.appendChild(humiditySpan);
-      }
-
       deviceItem.appendChild(nameDiv);
       deviceItem.appendChild(statusDiv);
       deviceList.appendChild(deviceItem);
@@ -240,14 +209,9 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   getFilteredDevices: function (devices) {
     return devices.filter(function (device) {
-      if (this.config.showOnlineOnly && !device.online) {
-        return false;
-      }
-
       if (this.config.hideAppliances && this.isApplianceDevice(device)) {
         return false;
       }
-
       return true;
     }.bind(this));
   },
