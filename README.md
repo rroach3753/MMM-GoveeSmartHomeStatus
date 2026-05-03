@@ -220,13 +220,13 @@ This error indicates your system cannot reach the Govee API server. Try these st
 
 1. **Check Network Connectivity**
    ```bash
-   ping -c 4 api.govee.com
-   nslookup api.govee.com
+   ping -c 4 openapi.api.govee.com
+   nslookup openapi.api.govee.com
    ```
 
 2. **Check Firewall/Network Access**
    - Ensure your network allows HTTPS (port 443) outbound connections
-   - Check if your ISP or network is blocking access to api.govee.com
+   - Check if your ISP or network is blocking access to openapi.api.govee.com
    - Try disabling VPN or proxy if you're using one
 
 3. **Verify DNS Configuration**
@@ -237,7 +237,7 @@ This error indicates your system cannot reach the Govee API server. Try these st
 
 4. **Test API Connectivity**
    ```bash
-   curl -H "Govee-Token: YOUR_API_KEY" https://api.govee.com/v1/devices
+   curl -H "Govee-API-Key: YOUR_API_KEY" https://openapi.api.govee.com/router/api/v1/user/devices
    ```
 
 ### Invalid API Key Error

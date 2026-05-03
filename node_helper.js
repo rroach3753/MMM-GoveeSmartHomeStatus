@@ -25,12 +25,12 @@ module.exports = NodeHelper.create({
     }
 
     var options = {
-      hostname: "api.govee.com",
+      hostname: "openapi.api.govee.com",
       port: 443,
-      path: "/v1/devices",
+      path: "/router/api/v1/user/devices",
       method: "GET",
       headers: {
-        "Govee-Token": apiKey,
+        "Govee-API-Key": apiKey,
         "Content-Type": "application/json"
       },
       timeout: 10000
