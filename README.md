@@ -160,6 +160,16 @@ Add to your `config.js`:
 }
 ```
 
+This layout displays:
+- **Lights Summary** — Total count of lights on/off (e.g., "7 on / 16 off")
+- **Room Summary** — 2-column grid showing per-room device counts with color-coding:
+  - Green border/text for rooms with at least one device ON
+  - Gray border/text for rooms with all devices OFF
+- **Device Grid** — Compact 3-column card layout showing all devices with name and power state (ON/OFF)
+  - Green border indicates powered ON devices
+  - Gray border indicates powered OFF devices
+  - Perfect for side panels (bottom_right, top_right, etc.)
+
 ## Customizing Light Detection
 
 The module classifies a device as a light when its name, type, or model contains a keyword from `lightDetectionKeywords`. This is used for the lights summary and for detecting light devices in room summaries.
