@@ -17,6 +17,8 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
     roomNameDelimiter: " - ",
     fullWidthBottomBar: false,
+    compactCards: false,
+    maxCompactCards: 12,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
     noApiKeyMessage: "API key not configured.",
@@ -160,74 +162,115 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
     this.appendSummaries(container, filteredDevices);
 
-    var deviceList = document.createElement("div");
-    deviceList.className = "device-list";
+    // Render device list (full or compact)
+    if (this.config.compactCards) {
+      var compactList = this.createCompactCardList(filteredDevices);
+      container.appendChild(compactList);
+    } else {
+      var deviceList = document.createElement("div");
+      deviceList.className = "device-list";
 
-    filteredDevices.forEach(function (device) {
-      var deviceItem = document.createElement("div");
-      deviceItem.className = "device-item";
+      filteredDevices.forEach(function (device) {
+        var deviceItem = document.createElement("div");
+        deviceItem.className = "device-item";
 
-      if (!device.online) {
-        deviceItem.classList.add("offline");
-      }
+        if (!device.online) {
+          deviceItem.classList.add("offline");
+        }
 
-      // Device name
-      var nameDiv = document.createElement("div");
-      nameDiv.className = "device-name";
-      nameDiv.textContent = device.deviceName || "Unknown Device";
+        // Device name
+        var nameDiv = document.createElement("div");
+        nameDiv.className = "device-name";
+        nameDiv.textContent = device.deviceName || "Unknown Device";
 
-      // Device status
-      var statusDiv = document.createElement("div");
-      statusDiv.className = "device-status";
+        // Device status
+        var statusDiv = document.createElement("div");
+        statusDiv.className = "device-status";
 
-      // Online/Offline badge
-      var badge = document.createElement("span");
-      badge.className = "status-badge";
-      if (device.online) {
-        badge.classList.add("online");
-        badge.textContent = "ONLINE";
-      } else {
-        badge.classList.add("offline");
-        badge.textContent = "OFFLINE";
-      }
-      statusDiv.appendChild(badge);
+        // Online/Offline badge
+        var badge = document.createElement("span");
+        badge.className = "status-badge";
+        if (device.online) {
+          badge.classList.add("online");
+          badge.textContent = "ONLINE";
+        } else {
+          badge.classList.add("offline");
+          badge.textContent = "OFFLINE";
+        }
+        statusDiv.appendChild(badge);
 
-      if (this.config.showPower && typeof device.powerState !== "undefined") {
-        var powerSpan = document.createElement("span");
-        powerSpan.className = "device-detail";
-        powerSpan.textContent = device.powerState ? "On" : "Off";
-        statusDiv.appendChild(document.createElement("br"));
-        statusDiv.appendChild(powerSpan);
-      }
+        if (this.config.showPower && typeof device.powerState !== "undefined") {
+          var powerSpan = document.createElement("span");
+          powerSpan.className = "device-detail";
+          powerSpan.textContent = device.powerState ? "On" : "Off";
+          statusDiv.appendChild(document.createElement("br"));
+          statusDiv.appendChild(powerSpan);
+        }
 
-      if (this.config.showTemperature && typeof device.temperature !== "undefined") {
-        var temperatureSpan = document.createElement("span");
-        temperatureSpan.className = "device-detail";
-        temperatureSpan.textContent = "Temp: " + device.temperature;
-        statusDiv.appendChild(document.createElement("br"));
-        statusDiv.appendChild(temperatureSpan);
-      }
+        if (this.config.showTemperature && typeof device.temperature !== "undefined") {
+          var temperatureSpan = document.createElement("span");
+          temperatureSpan.className = "device-detail";
+          temperatureSpan.textContent = "Temp: " + device.temperature;
+          statusDiv.appendChild(document.createElement("br"));
+          statusDiv.appendChild(temperatureSpan);
+        }
 
-      if (this.config.showHumidity && typeof device.humidity !== "undefined") {
-        var humiditySpan = document.createElement("span");
-        humiditySpan.className = "device-detail";
-        humiditySpan.textContent = "Humidity: " + device.humidity + "%";
-        statusDiv.appendChild(document.createElement("br"));
-        statusDiv.appendChild(humiditySpan);
-      }
+        if (this.config.showHumidity && typeof device.humidity !== "undefined") {
+          var humiditySpan = document.createElement("span");
+          humiditySpan.className = "device-detail";
+          humiditySpan.textContent = "Humidity: " + device.humidity + "%";
+          statusDiv.appendChild(document.createElement("br"));
+          statusDiv.appendChild(humiditySpan);
+        }
 
-      deviceItem.appendChild(nameDiv);
-      deviceItem.appendChild(statusDiv);
-      deviceList.appendChild(deviceItem);
-    }.bind(this));
+        deviceItem.appendChild(nameDiv);
+        deviceItem.appendChild(statusDiv);
+        deviceList.appendChild(deviceItem);
+      }.bind(this));
 
-    container.appendChild(deviceList);
+      container.appendChild(deviceList);
+    }
     wrapper.appendChild(container);
 
     return wrapper;
   },
 
-  notificationReceived: function (notification, payload, sender) {
+  createCompactCardList: function (devices) {
+    var maxCards = Number(this.config.maxCompactCards) || 12;
+    var devicesToShow = devices.slice(0, maxCards);
+
+    var wrapper = document.createElement("div");
+    wrapper.className = "compact-card-list";
+
+    devicesToShow.forEach(function (device) {
+      var card = document.createElement("div");
+      card.className = "compact-card";
+
+      if (!device.online) {
+        card.classList.add("offline");
+      }
+
+      if (device.powerState === true) {
+        card.classList.add("on");
+      }
+
+      // Card content
+      var nameDiv = document.createElement("div");
+      nameDiv.className = "compact-card-name";
+      nameDiv.textContent = device.deviceName || "Unknown";
+      card.appendChild(nameDiv);
+
+      if (this.config.showPower && typeof device.powerState !== "undefined") {
+        var powerDiv = document.createElement("div");
+        powerDiv.className = "compact-card-power";
+        powerDiv.textContent = device.powerState ? "ON" : "OFF";
+        card.appendChild(powerDiv);
+      }
+
+      wrapper.appendChild(card);
+    }.bind(this));
+
+    return wrapper;
     if (notification === "DOM_OBJECTS_CREATED") {
       // Handle any MagicMirror notifications if needed
     }

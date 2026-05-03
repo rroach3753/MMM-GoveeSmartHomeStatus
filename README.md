@@ -15,6 +15,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Real-time device list updates
 - Configurable refresh interval
 - Full-width bottom bar layout option for compact device display
+- **Compact horizontal card layout** with left/right scrolling (ideal for side panels)
 - Lights summary showing on/off counts for detected lights
 - Room summary showing on/total devices by room
 - Customizable light detection keywords
@@ -94,6 +95,8 @@ Add to your `config.js`:
 | `hideAppliances` | Boolean | Hide appliance-like devices from display | `true` |
 | `hiddenApplianceKeywords` | Array | Case-insensitive keywords used to hide appliances | `['ice maker', 'icemaker', 'refrigerator', 'fridge']` |
 | `roomNameDelimiter` | String | Delimiter used to infer room from device name | `' - '` |
+| `compactCards` | Boolean | Display devices as compact horizontal cards (scrollable) | `false` |
+| `maxCompactCards` | Number | Maximum number of devices to show in compact card view | `12` |
 | `emptyMessage` | String | Message when no devices available | `"No devices available."` |
 | `loadingMessage` | String | Loading message | `"Loading Govee devices..."` |
 | `noApiKeyMessage` | String | Message when API key not configured | `"API key not configured."` |
@@ -138,6 +141,21 @@ Add to your `config.js`:
       showLightsSummary: false,
       showRoomSummary: false,
       hideAppliances: false
+   }
+}
+```
+
+### Compact Cards Layout with Room Summaries
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "bottom_right",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      compactCards: true,
+      maxCompactCards: 12,
+      showRoomSummary: true,
+      showLightsSummary: true
    }
 }
 ```
