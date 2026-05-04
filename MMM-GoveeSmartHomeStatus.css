@@ -340,32 +340,32 @@
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact {
   grid-template-columns: none;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(140px, 180px);
-  justify-content: center;
+  grid-auto-columns: minmax(160px, 1fr);
+  justify-content: stretch;
   align-content: start;
-  gap: 4px;
+  gap: 5px;
   padding: 2px 0;
   width: 100%;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact.rows-2 {
-  grid-template-rows: repeat(2, minmax(28px, auto));
+  grid-template-rows: repeat(2, minmax(30px, auto));
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact.rows-3 {
-  grid-template-rows: repeat(3, minmax(26px, auto));
+  grid-template-rows: repeat(3, minmax(28px, auto));
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card {
-  min-height: 26px;
-  padding: 2px 4px;
+  min-height: 28px;
+  padding: 3px 5px;
   border-width: 1px;
   border-radius: 3px;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-name {
-  font-size: 9px;
-  line-height: 1;
+  font-size: 9.5px;
+  line-height: 1.1;
   min-height: 0;
   width: 100%;
   white-space: nowrap;
@@ -374,6 +374,6 @@
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-power {
-  font-size: 8px;
-  margin-top: 0px;
+  font-size: 8.5px;
+  margin-top: 1px;
 }
