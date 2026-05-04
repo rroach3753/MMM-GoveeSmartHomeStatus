@@ -110,6 +110,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       wrapper.classList.add("full-width-bottom-bar");
     }
 
+    if (this.config.compactCards) {
+      wrapper.classList.add("compact-cards-enabled");
+    }
+
     // Title
     if (this.config.title) {
       var titleDiv = document.createElement("div");

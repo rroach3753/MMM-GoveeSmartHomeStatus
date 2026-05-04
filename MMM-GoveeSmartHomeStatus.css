@@ -110,6 +110,32 @@
   gap: 8px;
 }
 
+.mmm-govee-smartHome.compact-cards-enabled .summary-wrap {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mmm-govee-smartHome.compact-cards-enabled .summary-section {
+  flex: 0 0 auto;
+}
+
+.mmm-govee-smartHome.compact-cards-enabled .room-summary-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  max-width: 100%;
+}
+
+.mmm-govee-smartHome.compact-cards-enabled .room-summary-item {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .summary-section {
   background-color: rgba(255, 255, 255, 0.06);
   border-radius: 4px;
