@@ -7,13 +7,6 @@ A MagicMirror module for displaying Govee smart home device status and informati
 
 **Repository:** [github.com/rroach3753/MMM-GoveeSmartHomeStatus](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus)
 
-## Requirements
-
-- MagicMirror2 installed and running
-- A Govee account with supported devices
-- A Govee Open API key (required)
-- Outbound HTTPS access to `openapi.api.govee.com`
-
 ## Features
 
 - Display list of Govee smart devices with live online and power state
@@ -27,6 +20,13 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Room summary showing on/total devices by room
 - Customizable light detection keywords
 - Appliance hiding with configurable keyword filters (enabled by default)
+
+## Requirements
+
+- MagicMirror2 installed and running
+- A Govee account with supported devices
+- A Govee Open API key (required)
+- Outbound HTTPS access to `openapi.api.govee.com`
 
 **Note:** This module now calls both Govee APIs: the device list endpoint and the per-device state endpoint. With large device counts, lower refresh intervals will consume your daily API quota faster.
 
