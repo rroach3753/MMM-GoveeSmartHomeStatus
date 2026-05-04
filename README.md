@@ -149,7 +149,7 @@ Add to your `config.js`:
     noApiKeyMessage: "API key not configured.",
     errorMessage: "Error fetching Govee device data."
   }
-}
+},
 ```
 
 ## Configuration Options
