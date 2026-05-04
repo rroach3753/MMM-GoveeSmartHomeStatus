@@ -269,6 +269,18 @@ config: {
 }
 ```
 
+### Alternative: get API key in the Govee mobile app
+If you prefer, you can request/generate your API key directly in the Govee app:
+
+1. Open the Govee Home app and sign in.
+2. Go to **Profile**.
+3. Open **About Us**.
+4. Tap **Apply for API Key** (or **Request API Key**, depending on app version).
+5. Submit the request and copy the generated key once approved/available.
+6. Paste that key into your module config (`apiKey: "YOUR_GOVEE_API_KEY"`).
+
+If you do not see the API key option in-app, update the app to the latest version and check the developer portal method above.
+
 ## Troubleshooting
 
 ### DNS Resolution Error: "getaddrinfo ENOTFOUND api.govee.com"
