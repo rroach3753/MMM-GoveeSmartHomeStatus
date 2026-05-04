@@ -131,6 +131,16 @@ Add to your `config.js`:
 }
 ```
 
+Bottom bar preview:
+
+![Bottom bar layout preview](images/bottom_bar-layout.png)
+
+In this layout:
+- Summaries are centered horizontally above device cards
+- Lights and room summaries render in a horizontal row
+- Device cards are compact and auto-pack into 2 rows for up to 15 devices
+- Device cards switch to 3 rows automatically when more devices are shown
+
 ### Disable Summaries and Show Appliances
 ```javascript
 {
