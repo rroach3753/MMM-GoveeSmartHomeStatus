@@ -242,6 +242,11 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     var wrapper = document.createElement("div");
     wrapper.className = "compact-card-list";
 
+    if (this.config.fullWidthBottomBar) {
+      wrapper.classList.add("bottom-bar-compact");
+      wrapper.classList.add(devicesToShow.length > 15 ? "rows-3" : "rows-2");
+    }
+
     devicesToShow.forEach(function (device) {
       var card = document.createElement("div");
       card.className = "compact-card";
