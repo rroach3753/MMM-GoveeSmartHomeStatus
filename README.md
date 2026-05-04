@@ -2,8 +2,8 @@
 
 A MagicMirror module for displaying Govee smart home device status and information.
 
-[![GitHub Release](https://img.shields.io/github/v/release/rroach3753/MMM-GoveeSmartHomeStatus?style=flat-square)](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus)
-[![GitHub License](https://img.shields.io/github/license/rroach3753/MMM-GoveeSmartHomeStatus?style=flat-square)](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus/blob/main/LICENSE)
+[![GitHub Tag](https://img.shields.io/github/v/tag/rroach3753/MMM-GoveeSmartHomeStatus?style=flat-square)](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus/tags)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus/blob/main/LICENSE)
 
 **Repository:** [github.com/rroach3753/MMM-GoveeSmartHomeStatus](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus)
 
