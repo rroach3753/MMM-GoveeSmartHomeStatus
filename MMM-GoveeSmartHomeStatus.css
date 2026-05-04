@@ -110,7 +110,7 @@
   gap: 8px;
 }
 
-.mmm-govee-smartHome.compact-cards-enabled .summary-wrap {
+.mmm-govee-smartHome.full-width-bottom-bar.compact-cards-enabled .summary-wrap {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: flex-start;
@@ -118,11 +118,11 @@
   gap: 8px;
 }
 
-.mmm-govee-smartHome.compact-cards-enabled .summary-section {
+.mmm-govee-smartHome.full-width-bottom-bar.compact-cards-enabled .summary-section {
   flex: 0 0 auto;
 }
 
-.mmm-govee-smartHome.compact-cards-enabled .room-summary-grid {
+.mmm-govee-smartHome.full-width-bottom-bar.compact-cards-enabled .room-summary-grid {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -131,7 +131,7 @@
   max-width: 100%;
 }
 
-.mmm-govee-smartHome.compact-cards-enabled .room-summary-item {
+.mmm-govee-smartHome.full-width-bottom-bar.compact-cards-enabled .room-summary-item {
   flex: 0 0 auto;
   white-space: nowrap;
 }
