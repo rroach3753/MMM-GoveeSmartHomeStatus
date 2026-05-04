@@ -7,9 +7,15 @@ A MagicMirror module for displaying Govee smart home device status and informati
 
 **Repository:** [github.com/rroach3753/MMM-GoveeSmartHomeStatus](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus)
 
+## Requirements
+
+- MagicMirror2 installed and running
+- A Govee account with supported devices
+- A Govee Open API key (required)
+- Outbound HTTPS access to `openapi.api.govee.com`
+
 ## Features
 
-- Requires a Govee Open API key to fetch device data
 - Display list of Govee smart devices with live online and power state
 - Display temperature and humidity when the device reports them
 - Color-coded online/offline status indicators
@@ -85,6 +91,34 @@ A MagicMirror module for displaying Govee smart home device status and informati
 ```bash
 mmpm update MMM-GoveeSmartHomeStatus
 ```
+
+## Govee API Key (Required)
+
+This module requires a Govee Open API key. Without it, device data cannot be loaded.
+
+### How to apply/get a key
+1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
+2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
+3. After approval, create/generate your API key from your Govee developer settings.
+4. Add the key to your MagicMirror module config:
+
+```javascript
+config: {
+   apiKey: "YOUR_GOVEE_API_KEY"
+}
+```
+
+### Alternative: get API key in the Govee mobile app
+If you prefer, you can request/generate your API key directly in the Govee app:
+
+1. Open the Govee Home app and sign in.
+2. Go to **Profile**.
+3. Open **About Us**.
+4. Tap **Apply for API Key** (or **Request API Key**, depending on app version).
+5. Submit the request and copy the generated key once approved/available.
+6. Paste that key into your module config (`apiKey: "YOUR_GOVEE_API_KEY"`).
+
+If you do not see the API key option in-app, update the app to the latest version and check the developer portal method above.
 
 ## Configuration
 
@@ -252,34 +286,6 @@ The module classifies a device as a light when its name, type, or model contains
    }
 }
 ```
-
-## Govee API Key (Required)
-
-This module requires a Govee Open API key. Without it, device data cannot be loaded.
-
-### How to apply/get a key
-1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
-2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
-3. After approval, create/generate your API key from your Govee developer settings.
-4. Add the key to your MagicMirror module config:
-
-```javascript
-config: {
-   apiKey: "YOUR_GOVEE_API_KEY"
-}
-```
-
-### Alternative: get API key in the Govee mobile app
-If you prefer, you can request/generate your API key directly in the Govee app:
-
-1. Open the Govee Home app and sign in.
-2. Go to **Profile**.
-3. Open **About Us**.
-4. Tap **Apply for API Key** (or **Request API Key**, depending on app version).
-5. Submit the request and copy the generated key once approved/available.
-6. Paste that key into your module config (`apiKey: "YOUR_GOVEE_API_KEY"`).
-
-If you do not see the API key option in-app, update the app to the latest version and check the developer portal method above.
 
 ## Troubleshooting
 
