@@ -133,7 +133,7 @@ Add to your `config.js`:
 
 Bottom bar preview:
 
-![Bottom bar layout preview](images/bottom_bar-layout.png)
+![Bottom bar layout preview](images/in_bottom_bar.png)
 
 In this layout:
 - Summaries are centered horizontally above device cards
