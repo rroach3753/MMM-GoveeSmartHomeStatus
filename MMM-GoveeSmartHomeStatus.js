@@ -248,7 +248,13 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
     if (this.config.fullWidthBottomBar) {
       wrapper.classList.add("bottom-bar-compact");
-      wrapper.classList.add(devicesToShow.length > 15 ? "rows-3" : "rows-2");
+
+      // Keep bottom bar cards to a maximum of two rows and distribute
+      // columns evenly so cards expand to available width.
+      var columnCount = Math.max(1, Math.ceil(devicesToShow.length / 2));
+      wrapper.classList.add("rows-2");
+      wrapper.style.gridTemplateColumns = "repeat(" + columnCount + ", minmax(0, 1fr))";
+      wrapper.style.gridTemplateRows = "repeat(2, minmax(30px, auto))";
     }
 
     devicesToShow.forEach(function (device) {

@@ -338,9 +338,7 @@
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact {
-  grid-template-columns: none;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(160px, 1fr);
+  grid-auto-flow: row;
   justify-content: stretch;
   align-content: start;
   gap: 5px;
@@ -350,10 +348,6 @@
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact.rows-2 {
   grid-template-rows: repeat(2, minmax(30px, auto));
-}
-
-.mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact.rows-3 {
-  grid-template-rows: repeat(3, minmax(28px, auto));
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card {
