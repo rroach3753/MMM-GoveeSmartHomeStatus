@@ -170,6 +170,10 @@ In this layout:
 }
 ```
 
+Outside bottom_bar preview:
+
+![Outside bottom_bar layout preview](images/outside_bottom_bar.png)
+
 This layout displays:
 - **Lights Summary** — Total count of lights on/off (e.g., "7 on / 16 off")
 - **Room Summary** — 2-column grid showing per-room device counts with color-coding:
