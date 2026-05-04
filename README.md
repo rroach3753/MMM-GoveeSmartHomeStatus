@@ -23,7 +23,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 
 ## Requirements
 
-- MagicMirror2 installed and running
+- MagicMirror² installed and running
 - A Govee account with supported devices
 - A Govee Open API key (required)
 - Outbound HTTPS access to `openapi.api.govee.com`
@@ -189,7 +189,7 @@ Add to your `config.js`:
       apiKey: "YOUR_GOVEE_API_KEY",
       title: "Govee Devices"
    }
-}
+},
 ```
 
 ### Full-Width Bottom Bar Layout
@@ -203,7 +203,7 @@ Add to your `config.js`:
       showTemperature: false,
       showHumidity: false
    }
-}
+},
 ```
 
 Bottom bar preview:
@@ -227,7 +227,7 @@ In this layout:
       showRoomSummary: false,
       hideAppliances: false
    }
-}
+},
 ```
 
 ### Compact Cards Layout with Room Summaries
@@ -242,7 +242,7 @@ In this layout:
       showRoomSummary: true,
       showLightsSummary: true
    }
-}
+},
 ```
 
 Outside bottom_bar preview:
@@ -272,7 +272,7 @@ The module classifies a device as a light when its name, type, or model contains
       apiKey: "YOUR_GOVEE_API_KEY",
       lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led", "sconce", "can", "uplight"]
    }
-}
+},
 ```
 
 ### Example: Strict light matching (only certain types)
@@ -284,7 +284,7 @@ The module classifies a device as a light when its name, type, or model contains
       apiKey: "YOUR_GOVEE_API_KEY",
       lightDetectionKeywords: ["bulb", "strip"]
    }
-}
+},
 ```
 
 ## Troubleshooting
