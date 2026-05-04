@@ -9,6 +9,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 
 ## Features
 
+- Requires a Govee Open API key to fetch device data
 - Display list of Govee smart devices with live online and power state
 - Display temperature and humidity when the device reports them
 - Color-coded online/offline status indicators
@@ -24,6 +25,8 @@ A MagicMirror module for displaying Govee smart home device status and informati
 **Note:** This module now calls both Govee APIs: the device list endpoint and the per-device state endpoint. With large device counts, lower refresh intervals will consume your daily API quota faster.
 
 ## Installation
+
+### Install (Standard / Git)
 
 1. Navigate to your MagicMirror modules directory:
    ```bash
@@ -44,6 +47,44 @@ A MagicMirror module for displaying Govee smart home device status and informati
    ```bash
    npm install
    ```
+
+### Install (MMPM)
+
+1. Install using MMPM:
+   ```bash
+   mmpm install MMM-GoveeSmartHomeStatus
+   ```
+
+2. If your setup requires dependencies to be installed manually, run:
+   ```bash
+   cd ~/MagicMirror/modules/MMM-GoveeSmartHomeStatus
+   npm install
+   ```
+
+## Updating
+
+### Update (Standard / Git)
+
+1. Navigate to the module directory:
+   ```bash
+   cd ~/MagicMirror/modules/MMM-GoveeSmartHomeStatus
+   ```
+
+2. Pull the latest changes:
+   ```bash
+   git pull
+   ```
+
+3. Refresh dependencies (recommended after updates):
+   ```bash
+   npm install
+   ```
+
+### Update (MMPM)
+
+```bash
+mmpm update MMM-GoveeSmartHomeStatus
+```
 
 ## Configuration
 
@@ -212,12 +253,21 @@ The module classifies a device as a light when its name, type, or model contains
 }
 ```
 
-## Getting Your API Key
-1. Visit [https://www.govee.com/](https://www.govee.com/)
-2. Log in to your account
-3. Navigate to Developer Settings
-4. Generate an API key
-5. Add it to your module configuration
+## Govee API Key (Required)
+
+This module requires a Govee Open API key. Without it, device data cannot be loaded.
+
+### How to apply/get a key
+1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
+2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
+3. After approval, create/generate your API key from your Govee developer settings.
+4. Add the key to your MagicMirror module config:
+
+```javascript
+config: {
+   apiKey: "YOUR_GOVEE_API_KEY"
+}
+```
 
 ## Troubleshooting
 
