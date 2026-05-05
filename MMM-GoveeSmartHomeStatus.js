@@ -69,6 +69,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       this.dataState.error = null;
       this.dataState.devices = payload.devices || [];
       this.dataState.fetchedAt = new Date();
+      this.configRetryCount = 0; // Reset retry count on success
 
       if (this.configRetryTimer) {
         clearTimeout(this.configRetryTimer);
@@ -93,6 +94,18 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       if (this.configRetryTimer) {
         clearTimeout(this.configRetryTimer);
       }
+
+      // Set up automatic retry after error with exponential backoff
+      var retryDelay = Math.min(5000 * Math.pow(1.5, this.configRetryCount), 30000);
+      console.warn("[MMM-GoveeSmartHomeStatus] Error occurred. Retrying in " + (retryDelay / 1000) + " seconds...");
+      
+      this.configRetryTimer = setTimeout(function () {
+        if (self.configRetryCount < self.maxConfigRetries) {
+          self.configRetryCount += 1;
+          self.dataState.loading = true;
+          self.requestBackendData();
+        }
+      }, retryDelay);
 
       this.updateDom(300);
     }

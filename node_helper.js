@@ -31,7 +31,7 @@ module.exports = NodeHelper.create({
         "Govee-API-Key": apiKey,
         "Content-Type": "application/json"
       },
-      timeout: 10000
+      timeout: 15000
     };
 
     var req = https.request(options, function (res) {
@@ -181,7 +181,7 @@ module.exports = NodeHelper.create({
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(requestBody)
       },
-      timeout: 10000
+      timeout: 15000
     };
 
     var req = https.request(options, function (res) {
