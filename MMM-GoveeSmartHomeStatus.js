@@ -299,9 +299,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }.bind(this));
 
     return wrapper;
-    if (notification === "DOM_OBJECTS_CREATED") {
-      // Handle any MagicMirror notifications if needed
-    }
   },
 
   getFilteredDevices: function (devices) {
