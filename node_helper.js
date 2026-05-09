@@ -517,6 +517,7 @@ module.exports = NodeHelper.create({
 
     sharedSocket.on("message", function (message, rinfo) {
       var parsed;
+      var responseData;
       var statusDevice;
       var responseIp;
 
@@ -531,6 +532,7 @@ module.exports = NodeHelper.create({
         return;
       }
 
+      responseData = parsed && parsed.msg && parsed.msg.data ? parsed.msg.data : {};
       responseIp = String((rinfo && rinfo.address) || statusDevice.localIp || "").trim();
 
       // Find the corresponding device in our list by IP and optionally by deviceId
@@ -545,9 +547,9 @@ module.exports = NodeHelper.create({
         }
 
         var expectedDeviceId = String(device.deviceId || "").trim().toLowerCase();
-        var responseDeviceId = String(statusDevice.deviceId || "").trim().toLowerCase();
+        var responseDeviceId = String(responseData.device || responseData.deviceId || parsed.device || "").trim().toLowerCase();
 
-        // If both IDs are known, require them to match
+        // Only enforce ID matching when the response explicitly reports one.
         if (expectedDeviceId && responseDeviceId && expectedDeviceId !== responseDeviceId) {
           return;
         }
