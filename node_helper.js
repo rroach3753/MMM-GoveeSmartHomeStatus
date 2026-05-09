@@ -876,7 +876,8 @@ module.exports = NodeHelper.create({
           humidity: undefined,
           brightness: undefined,
           colorTemperature: undefined,
-          color: undefined
+          color: undefined,
+          source: "cloud"
         };
       });
     }
@@ -1019,7 +1020,8 @@ module.exports = NodeHelper.create({
       humidity: this.getNumericCapabilityState(capabilities, ["sensorHumidity", "humidity"]),
       brightness: this.getNumericCapabilityState(capabilities, ["brightness"]),
       colorTemperature: this.getNumericCapabilityState(capabilities, ["colorTemperatureK"]),
-      color: this.getCapabilityState(capabilities, ["colorRgb"])
+      color: this.getCapabilityState(capabilities, ["colorRgb"]),
+      source: device.source || "cloud"
     };
   },
 

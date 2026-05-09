@@ -350,6 +350,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       return "";
     }
 
+    if (device.source === "cloud") {
+      return "CLOUD";
+    }
+
     if (device.source === "cloud+lan") {
       return "LAN+";
     }
