@@ -97,6 +97,11 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       this.dataState.error = payload.error || this.config.errorMessage;
       this.dataState.devices = [];
 
+      if (this.refreshTimer) {
+        clearTimeout(this.refreshTimer);
+        this.refreshTimer = null;
+      }
+
       if (this.configRetryTimer) {
         clearTimeout(this.configRetryTimer);
       }

@@ -2,9 +2,23 @@ const NodeHelper = require("node_helper");
 const https = require("node:https");
 const dgram = require("node:dgram");
 
+const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
+
 module.exports = NodeHelper.create({
   start: function () {
     console.log("MMM-GoveeSmartHomeStatus node_helper started");
+  },
+
+  sendDevicesData: function (devices) {
+    this.sendSocketNotification("GOVEE_DEVICES_DATA", {
+      devices: Array.isArray(devices) ? devices : []
+    });
+  },
+
+  sendDevicesError: function (errorMessage) {
+    this.sendSocketNotification("GOVEE_DEVICES_ERROR", {
+      error: String(errorMessage || "Unknown error")
+    });
   },
 
   socketNotificationReceived: function (notification, payload) {
@@ -23,15 +37,11 @@ module.exports = NodeHelper.create({
     function sendCloudData() {
       self.fetchCloudDevices(apiKey, function (error, devices) {
         if (error) {
-          self.sendSocketNotification("GOVEE_DEVICES_ERROR", {
-            error: error.message
-          });
+          self.sendDevicesError(error.message);
           return;
         }
 
-        self.sendSocketNotification("GOVEE_DEVICES_DATA", {
-          devices: devices
-        });
+        self.sendDevicesData(devices);
       });
     }
 
@@ -39,44 +49,32 @@ module.exports = NodeHelper.create({
       this.discoverLanDevices(lanDiscoveryTimeout, function (lanError, lanDevices) {
         if (lanOnly) {
           if (lanError) {
-            self.sendSocketNotification("GOVEE_DEVICES_ERROR", {
-              error: "LAN discovery failed: " + lanError.message
-            });
+            self.sendDevicesError("LAN discovery failed: " + lanError.message);
             return;
           }
 
-          self.sendSocketNotification("GOVEE_DEVICES_DATA", {
-            devices: lanDevices
-          });
+          self.sendDevicesData(lanDevices);
           return;
         }
 
         if (!apiKey) {
-          self.sendSocketNotification("GOVEE_DEVICES_ERROR", {
-            error: "API key is required unless lanOnly is enabled"
-          });
+          self.sendDevicesError("API key is required unless lanOnly is enabled");
           return;
         }
 
         self.fetchCloudDevices(apiKey, function (cloudError, cloudDevices) {
           if (cloudError) {
-            self.sendSocketNotification("GOVEE_DEVICES_ERROR", {
-              error: cloudError.message
-            });
+            self.sendDevicesError(cloudError.message);
             return;
           }
 
           // If LAN discovery fails, keep cloud behavior unchanged.
           if (lanError) {
-            self.sendSocketNotification("GOVEE_DEVICES_DATA", {
-              devices: cloudDevices
-            });
+            self.sendDevicesData(cloudDevices);
             return;
           }
 
-          self.sendSocketNotification("GOVEE_DEVICES_DATA", {
-            devices: self.mergeLanIntoCloud(cloudDevices, lanDevices)
-          });
+          self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevices));
         });
       });
 
@@ -84,9 +82,7 @@ module.exports = NodeHelper.create({
     }
 
     if (!apiKey) {
-      self.sendSocketNotification("GOVEE_DEVICES_ERROR", {
-        error: "API key is required"
-      });
+      self.sendDevicesError("API key is required");
       return;
     }
 
@@ -95,6 +91,16 @@ module.exports = NodeHelper.create({
 
   fetchCloudDevices: function (apiKey, callback) {
     var self = this;
+    var isSettled = false;
+
+    function safeCallback(error, devices) {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      callback(error, devices);
+    }
 
     var options = {
       hostname: "openapi.api.govee.com",
@@ -121,22 +127,22 @@ module.exports = NodeHelper.create({
             var jsonData = JSON.parse(data);
             var devices = self.processGoveeResponse(jsonData);
             self.fetchDeviceStates(apiKey, devices, function (enrichedDevices) {
-              callback(null, enrichedDevices);
+              safeCallback(null, enrichedDevices);
             });
           } else if (res.statusCode === 401) {
-            callback(new Error("Invalid API key (401)"));
+            safeCallback(new Error("Invalid API key (401)"));
           } else {
-            callback(new Error("HTTP " + res.statusCode + ": " + res.statusMessage));
+            safeCallback(new Error("HTTP " + res.statusCode + ": " + res.statusMessage));
           }
         } catch (err) {
-          callback(new Error("Error parsing response: " + err.message));
+          safeCallback(new Error("Error parsing response: " + err.message));
         }
       });
     });
 
     req.on("timeout", function () {
       req.destroy();
-      callback(new Error("Request timeout"));
+      safeCallback(new Error("Request timeout"));
     });
 
     req.on("error", function (err) {
@@ -151,7 +157,7 @@ module.exports = NodeHelper.create({
         errorMessage = "Connection timeout. Check your network connection.";
       }
 
-      callback(new Error(errorMessage));
+      safeCallback(new Error(errorMessage));
     });
 
     req.end();
@@ -184,7 +190,7 @@ module.exports = NodeHelper.create({
       finish(error);
     });
 
-    socket.on("message", function (message) {
+    socket.on("message", function (message, rinfo) {
       var parsed;
       var lanDevice;
       var uniqueKey;
@@ -195,7 +201,7 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      lanDevice = self.normalizeLanDevice(parsed);
+      lanDevice = self.normalizeLanDevice(parsed, rinfo);
       if (!lanDevice) {
         return;
       }
@@ -232,23 +238,37 @@ module.exports = NodeHelper.create({
     }, Math.max(1000, timeoutMs || 4000));
   },
 
-  normalizeLanDevice: function (lanPayload) {
+  normalizeLanDevice: function (lanPayload, rinfo) {
     var msg = lanPayload && lanPayload.msg ? lanPayload.msg : {};
     var data = msg && msg.data ? msg.data : {};
+    var cmd = msg && msg.cmd ? String(msg.cmd).toLowerCase() : "";
+    var senderIp = rinfo && rinfo.address ? String(rinfo.address) : "";
     var deviceId = data.device || data.deviceId || lanPayload.device || "";
     var sku = data.sku || lanPayload.sku || "";
-    var ip = data.ip || data.localIp || lanPayload.ip || "";
+    var payloadIp = data.ip || data.localIp || lanPayload.ip || "";
+    var ip = payloadIp || senderIp;
     var name = data.deviceName || data.name || lanPayload.deviceName || "";
 
-    if (!deviceId && !ip) {
+    // Accept only known LAN status/discovery packet shapes.
+    if (cmd && LAN_DISCOVERY_COMMANDS.indexOf(cmd) === -1) {
+      return null;
+    }
+
+    // Ignore packets missing key identity fields.
+    if (!deviceId || !sku || !ip) {
+      return null;
+    }
+
+    // If payload claims a different IP than sender, treat as untrusted.
+    if (payloadIp && senderIp && String(payloadIp) !== String(senderIp)) {
       return null;
     }
 
     return {
-      deviceId: deviceId || ip,
+      deviceId: deviceId,
       deviceName: name || (sku ? (sku + " (LAN)") : "Govee LAN Device"),
       deviceType: "LAN",
-      model: sku || "Unknown",
+      model: sku,
       roomName: "",
       online: true,
       powerState: undefined,
@@ -369,6 +389,17 @@ module.exports = NodeHelper.create({
   },
 
   fetchDeviceState: function (apiKey, device, callback) {
+    var isSettled = false;
+
+    function safeCallback(error, payload) {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      callback(error, payload);
+    }
+
     var requestBody = JSON.stringify({
       requestId: this.generateRequestId(),
       payload: {
@@ -401,23 +432,23 @@ module.exports = NodeHelper.create({
         var jsonData;
 
         if (res.statusCode !== 200) {
-          callback(new Error("HTTP " + res.statusCode + ": " + res.statusMessage));
+          safeCallback(new Error("HTTP " + res.statusCode + ": " + res.statusMessage));
           return;
         }
 
         try {
           jsonData = JSON.parse(data);
         } catch (error) {
-          callback(error);
+          safeCallback(error);
           return;
         }
 
         if (jsonData.code !== 200 || !jsonData.payload) {
-          callback(new Error(jsonData.msg || "Unexpected state response"));
+          safeCallback(new Error(jsonData.msg || "Unexpected state response"));
           return;
         }
 
-        callback(null, jsonData.payload);
+        safeCallback(null, jsonData.payload);
       });
     });
 
@@ -426,7 +457,7 @@ module.exports = NodeHelper.create({
     });
 
     req.on("error", function (error) {
-      callback(error);
+      safeCallback(error);
     });
 
     req.write(requestBody);

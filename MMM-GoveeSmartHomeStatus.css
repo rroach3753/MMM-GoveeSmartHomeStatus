@@ -169,13 +169,6 @@
 }
 
 .room-summary-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.room-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 6px 8px;

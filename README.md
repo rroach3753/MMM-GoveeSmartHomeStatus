@@ -26,7 +26,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 
 - MagicMirror² installed and running
 - A Govee account with supported devices
-- A Govee Open API key (required)
+- A Govee Open API key (required for cloud or hybrid modes)
 - Outbound HTTPS access to `openapi.api.govee.com`
 
 For LAN Control mode:
@@ -104,7 +104,9 @@ This module requires a Govee Open API key. Without it, device data cannot be loa
 
 If you configure `enableLanControl: true` and `lanOnly: true`, you can run LAN discovery mode without an API key.
 
-### How to apply/get a key
+LAN-only mode is currently discovery-focused. Some devices may not report cloud-level telemetry fields (for example, power/temperature/humidity) unless cloud mode is also enabled.
+
+### How to get a key
 1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
 2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
 3. After approval, create/generate your API key from your Govee developer settings.
@@ -151,9 +153,9 @@ Add to your `config.js`:
     hideAppliances: true,              // Hide appliance devices by keyword
     hiddenApplianceKeywords: ["ice maker", "fridge"],
     roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
-   enableLanControl: false,
-   lanOnly: false,
-   lanDiscoveryTimeout: 4000,
+    enableLanControl: false,
+    lanOnly: false,
+    lanDiscoveryTimeout: 4000,
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -260,6 +262,8 @@ Add to your `config.js`:
    }
 },
 ```
+
+Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you want LAN reachability plus richer cloud state data.
 
 ### Compact Cards Layout with Room Summaries
 ```javascript
@@ -378,7 +382,7 @@ This error indicates your system cannot reach the Govee API server. Try these st
 
 ## Dependencies
 
-None - uses Node.js built-in modules (`https`, `url`)
+None. Uses only Node.js built-in modules (`https`, `dgram`).
 
 ## License
 

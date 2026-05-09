@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0] - 2026-05-08
+
+### Added
+- Optional LAN discovery support with hybrid cloud+LAN mode
+- LAN-only mode option for local discovery without API key
+- LAN source status badges in standard and compact card views (`LAN` / `LAN+`)
+
+### Changed
+- Bottom bar compact cards constrained to a maximum of 2 rows with improved width fitting
+- Refined compact layout spacing and typography for better readability in bottom bar mode
+- Updated documentation for LAN setup, LAN-only behavior, and configuration examples
+
+### Fixed
+- Prevented duplicate backend callback completion paths on timeout/error races
+- Prevented overlapping frontend poll timers after error scenarios
+- Hardened LAN packet validation to reduce acceptance of malformed/untrusted payloads
+- Corrected license file format and refreshed README consistency/details
+
 ## [1.0.0] - 2026-05-03
 
 ### Added

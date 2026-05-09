@@ -1,6 +1,4 @@
-const { defineConfig } = require("eslint/config");
-
-module.exports = defineConfig([
+module.exports = [
   {
     ignores: [
       "node_modules/**",
@@ -21,4 +19,4 @@ module.exports = defineConfig([
       "no-console": "off"
     }
   }
-]);
+];
