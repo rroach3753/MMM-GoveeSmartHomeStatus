@@ -6,6 +6,7 @@ const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
 const LAN_DISCOVERY_GROUP = "239.255.255.250";
 const LAN_DISCOVERY_SEND_PORT = 4001;
 const LAN_DISCOVERY_LISTEN_PORT = 4002;
+const LAN_DEVICE_CONTROL_PORT = 4003;
 const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
 
 module.exports = NodeHelper.create({
@@ -384,9 +385,8 @@ module.exports = NodeHelper.create({
         // Membership may fail on some interfaces but multicast send can still work.
       }
 
-      // Multicast + broadcast targets used by Govee LAN implementations.
+      // Multicast target used by Govee LAN implementations.
       socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, LAN_DISCOVERY_GROUP);
-      socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, "255.255.255.255");
 
       // Optional unicast targets for cross-subnet environments.
       normalizedTargets.forEach(function (targetIp) {
@@ -577,7 +577,7 @@ module.exports = NodeHelper.create({
     });
 
     socket.bind(function () {
-      socket.send(requestPayload, 0, requestPayload.length, LAN_DISCOVERY_SEND_PORT, device.localIp);
+      socket.send(requestPayload, 0, requestPayload.length, LAN_DEVICE_CONTROL_PORT, device.localIp);
     });
 
     setTimeout(function () {
