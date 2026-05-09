@@ -11,6 +11,11 @@ const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
 module.exports = NodeHelper.create({
   start: function () {
     console.log("MMM-GoveeSmartHomeStatus node_helper started");
+    this.cloudCacheApiKey = "";
+    this.cachedCloudDevices = [];
+    this.cachedEnrichedCloudDevices = [];
+    this.lastCloudListFetchAt = 0;
+    this.lastCloudStateFetchAt = 0;
   },
 
   sendDevicesData: function (devices) {
@@ -39,9 +44,11 @@ module.exports = NodeHelper.create({
     var lanDiscoveryTimeout = Number(requestOptions.lanDiscoveryTimeout) || 4000;
     var lanDiscoveryTargets = this.normalizeDiscoveryTargets(requestOptions.lanDiscoveryTargets);
     var staticLanDevices = this.normalizeStaticLanDevices(requestOptions.lanStaticDevices);
+    var cloudDeviceListRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceListRefreshInterval);
+    var cloudDeviceStateRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceStateRefreshInterval);
 
     function sendCloudData() {
-      self.fetchCloudDevices(apiKey, function (error, devices) {
+      self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
         if (error) {
           self.sendDevicesError(error.message);
           return;
@@ -55,34 +62,38 @@ module.exports = NodeHelper.create({
       this.discoverLanDevices(lanDiscoveryTimeout, lanDiscoveryTargets, function (lanError, lanDevices) {
         var combinedLanDevices = self.addStaticLanDevices(lanDevices, staticLanDevices);
 
-        if (lanOnly) {
-          if (lanError && !combinedLanDevices.length) {
-            self.sendDevicesError("LAN discovery failed: " + lanError.message);
+        self.fetchLanDeviceStatuses(combinedLanDevices, lanDiscoveryTimeout, function (lanStatusError, statusLanDevices) {
+          var lanDevicesWithStatus = statusLanDevices;
+
+          if (lanOnly) {
+            if ((lanError || lanStatusError) && !lanDevicesWithStatus.length) {
+              self.sendDevicesError("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"));
+              return;
+            }
+
+            self.sendDevicesData(lanDevicesWithStatus);
             return;
           }
 
-          self.sendDevicesData(combinedLanDevices);
-          return;
-        }
-
-        if (!apiKey) {
-          self.sendDevicesError("API key is required unless lanOnly is enabled");
-          return;
-        }
-
-        self.fetchCloudDevices(apiKey, function (cloudError, cloudDevices) {
-          if (cloudError) {
-            self.sendDevicesError(cloudError.message);
+          if (!apiKey) {
+            self.sendDevicesError("API key is required unless lanOnly is enabled");
             return;
           }
 
-          // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
-          if (lanError && !combinedLanDevices.length) {
-            self.sendDevicesData(cloudDevices);
-            return;
-          }
+          self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (cloudError, cloudDevices) {
+            if (cloudError) {
+              self.sendDevicesError(cloudError.message);
+              return;
+            }
 
-          self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, combinedLanDevices));
+            // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
+            if (lanError && !lanDevicesWithStatus.length) {
+              self.sendDevicesData(cloudDevices);
+              return;
+            }
+
+            self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus));
+          });
         });
       });
 
@@ -97,7 +108,89 @@ module.exports = NodeHelper.create({
     sendCloudData();
   },
 
-  fetchCloudDevices: function (apiKey, callback) {
+  normalizeRefreshInterval: function (value) {
+    var parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return 0;
+    }
+
+    return Math.floor(parsed);
+  },
+
+  resetCloudCache: function (apiKey) {
+    this.cloudCacheApiKey = String(apiKey || "");
+    this.cachedCloudDevices = [];
+    this.cachedEnrichedCloudDevices = [];
+    this.lastCloudListFetchAt = 0;
+    this.lastCloudStateFetchAt = 0;
+  },
+
+  ensureCloudCacheForApiKey: function (apiKey) {
+    var currentApiKey = String(apiKey || "");
+
+    if (this.cloudCacheApiKey !== currentApiKey) {
+      this.resetCloudCache(currentApiKey);
+    }
+  },
+
+  fetchCloudDevicesSegmented: function (apiKey, listIntervalMs, stateIntervalMs, callback) {
+    var self = this;
+    var now = Date.now();
+    var listInterval = this.normalizeRefreshInterval(listIntervalMs);
+    var stateInterval = this.normalizeRefreshInterval(stateIntervalMs);
+    var hasCachedList = Array.isArray(this.cachedCloudDevices) && this.cachedCloudDevices.length > 0;
+    var hasCachedEnriched = Array.isArray(this.cachedEnrichedCloudDevices) && this.cachedEnrichedCloudDevices.length > 0;
+    var shouldFetchList;
+    var shouldFetchState;
+
+    function done(error, devices) {
+      callback(error || null, Array.isArray(devices) ? devices : []);
+    }
+
+    function updateStatesForDevices(baseDevices) {
+      self.fetchDeviceStates(apiKey, baseDevices, function (enrichedDevices) {
+        self.cachedEnrichedCloudDevices = Array.isArray(enrichedDevices) ? enrichedDevices : [];
+        self.lastCloudStateFetchAt = Date.now();
+        done(null, self.cachedEnrichedCloudDevices);
+      });
+    }
+
+    this.ensureCloudCacheForApiKey(apiKey);
+
+    shouldFetchList = !hasCachedList || listInterval === 0 || !this.lastCloudListFetchAt || (now - this.lastCloudListFetchAt >= listInterval);
+    shouldFetchState = !hasCachedEnriched || stateInterval === 0 || !this.lastCloudStateFetchAt || (now - this.lastCloudStateFetchAt >= stateInterval);
+
+    if (shouldFetchList) {
+      this.fetchCloudDeviceList(apiKey, function (listError, cloudDevices) {
+        if (listError) {
+          done(listError);
+          return;
+        }
+
+        self.cachedCloudDevices = Array.isArray(cloudDevices) ? cloudDevices : [];
+        self.lastCloudListFetchAt = Date.now();
+
+        if (shouldFetchState) {
+          updateStatesForDevices(self.cachedCloudDevices);
+          return;
+        }
+
+        done(null, self.applyCachedStateToCloudDevices(self.cachedCloudDevices));
+      });
+
+      return;
+    }
+
+    if (shouldFetchState) {
+      updateStatesForDevices(this.cachedCloudDevices);
+      return;
+    }
+
+    done(null, this.cachedEnrichedCloudDevices);
+  },
+
+  fetchCloudDeviceList: function (apiKey, callback) {
     var self = this;
     var isSettled = false;
 
@@ -133,10 +226,7 @@ module.exports = NodeHelper.create({
         try {
           if (res.statusCode === 200) {
             var jsonData = JSON.parse(data);
-            var devices = self.processGoveeResponse(jsonData);
-            self.fetchDeviceStates(apiKey, devices, function (enrichedDevices) {
-              safeCallback(null, enrichedDevices);
-            });
+            safeCallback(null, self.processGoveeResponse(jsonData));
           } else if (res.statusCode === 401) {
             safeCallback(new Error("Invalid API key (401)"));
           } else {
@@ -156,7 +246,7 @@ module.exports = NodeHelper.create({
     req.on("error", function (err) {
       console.error("[MMM-GoveeSmartHomeStatus] Request error:", err.message);
       var errorMessage = "Request error: " + err.message;
-      
+
       if (err.code === "ENOTFOUND") {
         errorMessage = "DNS resolution failed for openapi.api.govee.com. Check your network connection and firewall settings.";
       } else if (err.code === "ECONNREFUSED") {
@@ -169,6 +259,57 @@ module.exports = NodeHelper.create({
     });
 
     req.end();
+  },
+
+  applyCachedStateToCloudDevices: function (cloudDevices) {
+    var stateById = {};
+
+    if (!Array.isArray(cloudDevices)) {
+      return [];
+    }
+
+    (Array.isArray(this.cachedEnrichedCloudDevices) ? this.cachedEnrichedCloudDevices : []).forEach(function (device) {
+      var key = String(device.deviceId || "").toLowerCase();
+      if (!key) {
+        return;
+      }
+
+      stateById[key] = device;
+    });
+
+    return cloudDevices.map(function (device) {
+      var key = String(device.deviceId || "").toLowerCase();
+      var cachedState = stateById[key];
+
+      if (!cachedState) {
+        return device;
+      }
+
+      return Object.assign({}, device, {
+        online: cachedState.online,
+        powerState: cachedState.powerState,
+        temperature: cachedState.temperature,
+        humidity: cachedState.humidity,
+        brightness: cachedState.brightness,
+        colorTemperature: cachedState.colorTemperature,
+        color: cachedState.color
+      });
+    });
+  },
+
+  fetchCloudDevices: function (apiKey, callback) {
+    var self = this;
+
+    this.fetchCloudDeviceList(apiKey, function (error, devices) {
+      if (error) {
+        callback(error);
+        return;
+      }
+
+      self.fetchDeviceStates(apiKey, devices, function (enrichedDevices) {
+        callback(null, enrichedDevices);
+      });
+    });
   },
 
   discoverLanDevices: function (timeoutMs, targetIps, callback) {
@@ -291,7 +432,7 @@ module.exports = NodeHelper.create({
       model: sku || "Unknown",
       roomName: "",
       online: true,
-      powerState: undefined,
+      powerState: this.parseLanPowerState(lanPayload),
       temperature: undefined,
       humidity: undefined,
       brightness: undefined,
@@ -300,6 +441,148 @@ module.exports = NodeHelper.create({
       localIp: ip || undefined,
       source: "lan"
     };
+  },
+
+  parseLanPowerState: function (lanPayload) {
+    var msg = lanPayload && lanPayload.msg ? lanPayload.msg : {};
+    var data = msg && msg.data ? msg.data : {};
+    var capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+    var candidate;
+
+    if (typeof data.powerState !== "undefined") {
+      candidate = data.powerState;
+    } else if (typeof data.onOff !== "undefined") {
+      candidate = data.onOff;
+    } else if (typeof data.on !== "undefined") {
+      candidate = data.on;
+    } else if (typeof data.state !== "undefined") {
+      candidate = data.state;
+    }
+
+    if (typeof candidate !== "undefined") {
+      return this.normalizeBoolean(candidate, undefined);
+    }
+
+    return this.normalizeBoolean(this.getCapabilityState(capabilities, ["powerSwitch"]), undefined);
+  },
+
+  fetchLanDeviceStatuses: function (lanDevices, timeoutMs, callback) {
+    var self = this;
+    var devices = Array.isArray(lanDevices) ? lanDevices.filter(function (device) {
+      return device && device.localIp;
+    }) : [];
+    var completed = 0;
+    var results = new Array(devices.length);
+    var hasStarted = false;
+
+    function finish(error) {
+      if (hasStarted === null) {
+        return;
+      }
+
+      hasStarted = null;
+      callback(error || null, results.filter(function (device) {
+        return device !== null;
+      }));
+    }
+
+    if (!devices.length) {
+      callback(null, Array.isArray(lanDevices) ? lanDevices : []);
+      return;
+    }
+
+    hasStarted = true;
+
+    devices.forEach(function (device, index) {
+      self.fetchLanDeviceStatus(device, timeoutMs, function (error, statusDevice) {
+        if (error) {
+          results[index] = device;
+        } else {
+          results[index] = statusDevice || device;
+        }
+
+        completed += 1;
+        if (completed === devices.length) {
+          finish(null);
+        }
+      });
+    });
+  },
+
+  fetchLanDeviceStatus: function (device, timeoutMs, callback) {
+    var socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+    var isDone = false;
+    var self = this;
+    var timeout = Math.max(1000, Number(timeoutMs) || 2000);
+    var requestPayload = Buffer.from(JSON.stringify({
+      msg: {
+        cmd: "devStatus",
+        data: {}
+      }
+    }));
+
+    function finish(error, statusDevice) {
+      if (isDone) {
+        return;
+      }
+
+      isDone = true;
+
+      try {
+        socket.close();
+      } catch (closeError) {
+        // noop
+      }
+
+      callback(error || null, statusDevice || null);
+    }
+
+    socket.on("error", function (error) {
+      finish(error, null);
+    });
+
+    socket.on("message", function (message, rinfo) {
+      var parsed;
+      var statusDevice;
+
+      try {
+        parsed = JSON.parse(message.toString("utf8"));
+      } catch (parseError) {
+        return;
+      }
+
+      statusDevice = self.normalizeLanDevice(parsed, rinfo);
+      if (!statusDevice) {
+        return;
+      }
+
+      if (!statusDevice.deviceId) {
+        statusDevice.deviceId = device.deviceId;
+      }
+
+      if (!statusDevice.deviceName) {
+        statusDevice.deviceName = device.deviceName;
+      }
+
+      if (!statusDevice.localIp) {
+        statusDevice.localIp = device.localIp;
+      }
+
+      statusDevice.roomName = device.roomName || statusDevice.roomName;
+      statusDevice.model = device.model || statusDevice.model;
+      statusDevice.deviceType = device.deviceType || statusDevice.deviceType;
+      statusDevice.source = device.source || statusDevice.source;
+
+      finish(null, statusDevice);
+    });
+
+    socket.bind(function () {
+      socket.send(requestPayload, 0, requestPayload.length, LAN_DISCOVERY_SEND_PORT, device.localIp);
+    });
+
+    setTimeout(function () {
+      finish(null, device);
+    }, timeout);
   },
 
   normalizeDiscoveryTargets: function (targets) {
@@ -539,6 +822,12 @@ module.exports = NodeHelper.create({
       return Object.assign({}, cloudDevice, {
         online: true,
         localIp: lanMatch.localIp,
+        powerState: typeof lanMatch.powerState !== "undefined" ? lanMatch.powerState : cloudDevice.powerState,
+        temperature: typeof lanMatch.temperature !== "undefined" ? lanMatch.temperature : cloudDevice.temperature,
+        humidity: typeof lanMatch.humidity !== "undefined" ? lanMatch.humidity : cloudDevice.humidity,
+        brightness: typeof lanMatch.brightness !== "undefined" ? lanMatch.brightness : cloudDevice.brightness,
+        colorTemperature: typeof lanMatch.colorTemperature !== "undefined" ? lanMatch.colorTemperature : cloudDevice.colorTemperature,
+        color: typeof lanMatch.color !== "undefined" ? lanMatch.color : cloudDevice.color,
         source: "cloud+lan"
       });
     });

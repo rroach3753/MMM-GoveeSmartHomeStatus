@@ -21,6 +21,8 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     lanDiscoveryTimeout: 4000,
     lanDiscoveryTargets: [],
     lanStaticDevices: [],
+    cloudDeviceListRefreshInterval: 0,
+    cloudDeviceStateRefreshInterval: 0,
     fullWidthBottomBar: false,
     compactCards: false,
     maxCompactCards: 12,
@@ -52,7 +54,9 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       lanOnly: this.config.lanOnly,
       lanDiscoveryTimeout: this.config.lanDiscoveryTimeout,
       lanDiscoveryTargets: this.config.lanDiscoveryTargets,
-      lanStaticDevices: this.config.lanStaticDevices
+      lanStaticDevices: this.config.lanStaticDevices,
+      cloudDeviceListRefreshInterval: this.config.cloudDeviceListRefreshInterval,
+      cloudDeviceStateRefreshInterval: this.config.cloudDeviceStateRefreshInterval
     });
 
     if (this.configRetryTimer) {

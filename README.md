@@ -106,6 +106,10 @@ If you configure `enableLanControl: true` and `lanOnly: true`, you can run LAN d
 
 LAN-only mode is currently discovery-focused. Some devices may not report cloud-level telemetry fields (for example, power/temperature/humidity) unless cloud mode is also enabled.
 
+Fallback behavior:
+- In hybrid mode (`enableLanControl: true`, `lanOnly: false`), if LAN `devStatus` is unavailable for a device, the module keeps cloud state for that device.
+- In LAN-only mode (`lanOnly: true`), there is no cloud fallback.
+
 ### How to get a key
 1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
 2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
@@ -158,6 +162,8 @@ Add to your `config.js`:
    lanDiscoveryTimeout: 4000,
    lanDiscoveryTargets: [],            // Optional IPv4/CIDR targets for unicast LAN scan probes
    lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
+   cloudDeviceListRefreshInterval: 0,  // 0 = fetch cloud device list every module refresh
+   cloudDeviceStateRefreshInterval: 0, // 0 = fetch cloud state every module refresh
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -190,6 +196,8 @@ Add to your `config.js`:
 | `lanDiscoveryTimeout` | Number | LAN discovery timeout in milliseconds | `4000` |
 | `lanDiscoveryTargets` | Array | Optional IPv4 and CIDR target list for unicast LAN discovery probes (for cross-subnet/VLAN environments) | `[]` |
 | `lanStaticDevices` | Array | Optional static LAN device list merged with discovered devices | `[]` |
+| `cloudDeviceListRefreshInterval` | Number | Cloud device-list refresh interval in milliseconds. `0` keeps legacy behavior (every module refresh). | `0` |
+| `cloudDeviceStateRefreshInterval` | Number | Cloud device-state refresh interval in milliseconds. `0` keeps legacy behavior (every module refresh). | `0` |
 | `compactCards` | Boolean | Display devices as compact horizontal cards (scrollable) | `false` |
 | `maxCompactCards` | Number | Maximum number of devices to show in compact card view | `12` |
 | `emptyMessage` | String | Message when no devices available | `"No devices available."` |
@@ -268,6 +276,24 @@ Add to your `config.js`:
 ```
 
 Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you want LAN reachability plus richer cloud state data.
+
+### Hybrid Mode with Segmented Cloud Refresh
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "top_right",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      refreshInterval: 120000,               // Module refresh every 2 minutes
+      enableLanControl: true,
+      lanOnly: false,
+      cloudDeviceListRefreshInterval: 1800000, // Device list every 30 minutes
+      cloudDeviceStateRefreshInterval: 120000  // Device state every 2 minutes
+   }
+},
+```
+
+With segmented refresh enabled, set `refreshInterval` to your fastest desired update cadence (usually the cloud state interval).
 
 ### Cross-Subnet / VLAN Discovery
 ```javascript
@@ -418,6 +444,71 @@ This error indicates your system cannot reach the Govee API server. Try these st
 - The module calls the device list endpoint once per refresh plus one state request per returned device
 - Example: 25 devices with an 8 minute refresh interval is about 4,680 requests per day
 - Govee documents a 10,000 request per account per day limit, so avoid very short refresh intervals on larger device lists
+
+### API Budget Calculator
+
+If you use the default behavior, each cloud refresh makes:
+
+`1 + device_count`
+
+cloud requests, where `device_count` is the number of devices returned by the cloud device list.
+
+If you enable segmented refresh, the rough daily request count is:
+
+`(list_refreshes_per_day * 1) + (state_refreshes_per_day * device_count)`
+
+For example, with 25 devices, a 30 minute device-list interval, and a 2 minute device-state interval:
+
+- Device list calls per day: `24`
+- Device state calls per day: `25 * 720 = 18,000`
+- Total cloud requests per day: `18,024`
+
+That is a high-volume configuration and will exceed the 10,000 request limit.
+
+| Mode | Example intervals | Rough requests/day | Notes |
+|------|-------------------|--------------------|-------|
+| Legacy | `refreshInterval = 8 min` | `25 devices -> 4,680` | Current behavior when both segmented intervals are `0` |
+| Segmented, medium-use | `list = 30 min`, `state = 5 min` | `25 devices -> 7,224` | Balanced option that stays under the default limit |
+| Segmented, fast | `list = 30 min`, `state = 2 min` | `25 devices -> 18,024` | Too high for the default Govee limit |
+| Segmented, low-use | `list = 60 min`, `state = 10 min` | `25 devices -> 3,624` | Safer for larger device counts |
+
+Backward compatibility note: if both `cloudDeviceListRefreshInterval` and `cloudDeviceStateRefreshInterval` are `0`, the module keeps the legacy behavior and refreshes both list and state on every module refresh.
+
+### Safe Low-Use Segmented Refresh
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "top_right",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      refreshInterval: 600000,                // UI refresh every 10 minutes
+      enableLanControl: true,
+      lanOnly: false,
+      cloudDeviceListRefreshInterval: 3600000, // Cloud device list every 60 minutes
+      cloudDeviceStateRefreshInterval: 600000   // Cloud device state every 10 minutes
+   }
+},
+```
+
+This keeps the display responsive without hammering the cloud API. With 25 devices, it stays around `3,624` cloud requests/day.
+
+### Medium-Use Segmented Refresh
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "top_right",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      refreshInterval: 300000,                // UI refresh every 5 minutes
+      enableLanControl: true,
+      lanOnly: false,
+      cloudDeviceListRefreshInterval: 1800000, // Cloud device list every 30 minutes
+      cloudDeviceStateRefreshInterval: 300000   // Cloud device state every 5 minutes
+   }
+},
+```
+
+This is a balanced option for moderate device counts. With 25 devices, it stays around `7,224` cloud requests/day.
 
 ## Dependencies
 
