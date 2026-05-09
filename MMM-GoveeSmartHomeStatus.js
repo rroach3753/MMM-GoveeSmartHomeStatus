@@ -81,7 +81,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   getRequestTimeout: function () {
     var lanWindow = this.config.enableLanControl ? Math.max(1000, Number(this.config.lanDiscoveryTimeout) || 4000) * 2 : 0;
 
-    return Math.max(5000, lanWindow + 5000);
+    return Math.max(30000, lanWindow + 5000);
   },
 
   socketNotificationReceived: function (notification, payload) {
