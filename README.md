@@ -20,6 +20,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Room summary showing on/total devices by room
 - Customizable light detection keywords
 - Appliance hiding with configurable keyword filters (enabled by default)
+- Optional LAN Control discovery for local-network device visibility
 
 ## Requirements
 
@@ -27,6 +28,11 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - A Govee account with supported devices
 - A Govee Open API key (required)
 - Outbound HTTPS access to `openapi.api.govee.com`
+
+For LAN Control mode:
+- Enable LAN Control for each device in the Govee app
+- Keep MagicMirror and Govee devices on the same local network/VLAN
+- Allow local UDP multicast/broadcast discovery traffic
 
 **Note:** This module now calls both Govee APIs: the device list endpoint and the per-device state endpoint. With large device counts, lower refresh intervals will consume your daily API quota faster.
 
@@ -96,6 +102,8 @@ mmpm update MMM-GoveeSmartHomeStatus
 
 This module requires a Govee Open API key. Without it, device data cannot be loaded.
 
+If you configure `enableLanControl: true` and `lanOnly: true`, you can run LAN discovery mode without an API key.
+
 ### How to apply/get a key
 1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
 2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
@@ -143,6 +151,9 @@ Add to your `config.js`:
     hideAppliances: true,              // Hide appliance devices by keyword
     hiddenApplianceKeywords: ["ice maker", "fridge"],
     roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
+   enableLanControl: false,
+   lanOnly: false,
+   lanDiscoveryTimeout: 4000,
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -170,6 +181,9 @@ Add to your `config.js`:
 | `hideAppliances` | Boolean | Hide appliance-like devices from display | `true` |
 | `hiddenApplianceKeywords` | Array | Case-insensitive keywords used to hide appliances | `['ice maker', 'icemaker', 'refrigerator', 'fridge']` |
 | `roomNameDelimiter` | String | Delimiter used to infer room from device name | `' - '` |
+| `enableLanControl` | Boolean | Enable LAN discovery in addition to cloud API | `false` |
+| `lanOnly` | Boolean | Use LAN discovery only (no API key required) | `false` |
+| `lanDiscoveryTimeout` | Number | LAN discovery timeout in milliseconds | `4000` |
 | `compactCards` | Boolean | Display devices as compact horizontal cards (scrollable) | `false` |
 | `maxCompactCards` | Number | Maximum number of devices to show in compact card view | `12` |
 | `emptyMessage` | String | Message when no devices available | `"No devices available."` |
@@ -220,6 +234,33 @@ Add to your `config.js`:
 },
 ```
 
+### Hybrid Cloud + LAN Discovery (Recommended)
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "top_right",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      enableLanControl: true,
+      lanOnly: false,
+      lanDiscoveryTimeout: 4000
+   }
+},
+```
+
+### LAN-Only Discovery (No API Key)
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "top_right",
+   config: {
+      enableLanControl: true,
+      lanOnly: true,
+      lanDiscoveryTimeout: 5000
+   }
+},
+```
+
 ### Compact Cards Layout with Room Summaries
 ```javascript
 {
@@ -244,8 +285,7 @@ Add to your `config.js`:
 In this layout:
 - Summaries are centered horizontally above device cards
 - Lights and room summaries render in a horizontal row
-- Device cards are compact and auto-pack into 2 rows for up to 15 devices
-- Device cards switch to 3 rows automatically when more devices are shown
+- Device cards are compact and fit into a maximum of 2 rows
 
 ### Side Panel Layout (Bottom Right)
 

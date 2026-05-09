@@ -16,6 +16,9 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     hideAppliances: true,
     hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
     roomNameDelimiter: " - ",
+    enableLanControl: false,
+    lanOnly: false,
+    lanDiscoveryTimeout: 4000,
     fullWidthBottomBar: false,
     compactCards: false,
     maxCompactCards: 12,
@@ -42,7 +45,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     var self = this;
 
     this.sendSocketNotification("GOVEE_DEVICES_REQUEST", {
-      apiKey: this.config.apiKey
+      apiKey: this.config.apiKey,
+      enableLanControl: this.config.enableLanControl,
+      lanOnly: this.config.lanOnly,
+      lanDiscoveryTimeout: this.config.lanDiscoveryTimeout
     });
 
     if (this.configRetryTimer) {
@@ -145,7 +151,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }
 
     // No API key
-    if (!this.config.apiKey) {
+    if (!this.config.apiKey && !(this.config.enableLanControl && this.config.lanOnly)) {
       var noKeyDiv = document.createElement("div");
       noKeyDiv.className = "message";
       noKeyDiv.textContent = this.config.noApiKeyMessage;
