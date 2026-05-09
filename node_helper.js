@@ -377,8 +377,6 @@ module.exports = NodeHelper.create({
       }));
 
       socket.setMulticastTTL(2);
-      socket.setBroadcast(true);
-
       try {
         socket.addMembership(LAN_DISCOVERY_GROUP);
       } catch (membershipError) {
@@ -544,6 +542,10 @@ module.exports = NodeHelper.create({
     socket.on("message", function (message, rinfo) {
       var parsed;
       var statusDevice;
+      var responseIp;
+      var expectedIp;
+      var expectedDeviceId;
+      var responseDeviceId;
 
       try {
         parsed = JSON.parse(message.toString("utf8"));
@@ -553,6 +555,22 @@ module.exports = NodeHelper.create({
 
       statusDevice = self.normalizeLanDevice(parsed, rinfo);
       if (!statusDevice) {
+        return;
+      }
+
+      responseIp = String((rinfo && rinfo.address) || statusDevice.localIp || "").trim();
+      expectedIp = String(device.localIp || "").trim();
+
+      // Ignore replies from other hosts while probing a specific target.
+      if (expectedIp && responseIp && expectedIp !== responseIp) {
+        return;
+      }
+
+      expectedDeviceId = String(device.deviceId || "").trim().toLowerCase();
+      responseDeviceId = String(statusDevice.deviceId || "").trim().toLowerCase();
+
+      // If both IDs are known, require them to match.
+      if (expectedDeviceId && responseDeviceId && expectedDeviceId !== responseDeviceId) {
         return;
       }
 
@@ -768,7 +786,7 @@ module.exports = NodeHelper.create({
       deviceType: "LAN",
       model: model || "Unknown",
       roomName: String(staticDevice.roomName || ""),
-      online: staticDevice.online !== false,
+      online: typeof staticDevice.online === "boolean" ? staticDevice.online : false,
       powerState: undefined,
       temperature: undefined,
       humidity: undefined,
@@ -830,17 +848,6 @@ module.exports = NodeHelper.create({
         color: typeof lanMatch.color !== "undefined" ? lanMatch.color : cloudDevice.color,
         source: "cloud+lan"
       });
-    });
-
-    // Include LAN-only discovered devices that were not present in cloud list.
-    lanDevices.forEach(function (lanDevice) {
-      var existsInCloud = merged.some(function (device) {
-        return String(device.deviceId || "").toLowerCase() === String(lanDevice.deviceId || "").toLowerCase();
-      });
-
-      if (!existsInCloud) {
-        merged.push(lanDevice);
-      }
     });
 
     return merged;
