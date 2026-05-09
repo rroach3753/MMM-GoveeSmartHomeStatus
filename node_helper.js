@@ -20,6 +20,7 @@ module.exports = NodeHelper.create({
   },
 
   sendDevicesData: function (devices) {
+    console.log("[DEBUG] Sending devices data to frontend", new Date().toISOString(), "count:", Array.isArray(devices) ? devices.length : 0);
     this.sendSocketNotification("GOVEE_DEVICES_DATA", {
       devices: Array.isArray(devices) ? devices : []
     });
@@ -32,6 +33,7 @@ module.exports = NodeHelper.create({
   },
 
   socketNotificationReceived: function (notification, payload) {
+    console.log("[DEBUG] Socket notification received", notification, new Date().toISOString());
     if (notification === "GOVEE_DEVICES_REQUEST") {
       this.fetchGoveeDevices(payload || {});
     }
@@ -39,6 +41,7 @@ module.exports = NodeHelper.create({
 
   fetchGoveeDevices: function (requestOptions) {
     var self = this;
+    console.log("[DEBUG] fetchGoveeDevices called", new Date().toISOString());
     var apiKey = requestOptions.apiKey;
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
@@ -61,9 +64,11 @@ module.exports = NodeHelper.create({
 
     if (enableLanControl) {
       this.discoverLanDevices(lanDiscoveryTimeout, lanDiscoveryTargets, function (lanError, lanDevices) {
+        console.log("[DEBUG] LAN discovery completed", new Date().toISOString(), "error:", lanError ? lanError.message : "none", "devices found:", lanDevices ? lanDevices.length : 0);
         var combinedLanDevices = self.addStaticLanDevices(lanDevices, staticLanDevices);
 
         self.fetchLanDeviceStatuses(combinedLanDevices, lanDiscoveryTimeout, function (lanStatusError, statusLanDevices) {
+          console.log("[DEBUG] LAN device statuses fetched", new Date().toISOString(), "error:", lanStatusError ? lanStatusError.message : "none", "devices with status:", statusLanDevices ? statusLanDevices.length : 0);
           var lanDevicesWithStatus = statusLanDevices;
 
           if (lanOnly) {
