@@ -6,6 +6,7 @@ const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
 const LAN_DISCOVERY_GROUP = "239.255.255.250";
 const LAN_DISCOVERY_SEND_PORT = 4001;
 const LAN_DISCOVERY_LISTEN_PORT = 4002;
+const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
 
 module.exports = NodeHelper.create({
   start: function () {
@@ -36,6 +37,8 @@ module.exports = NodeHelper.create({
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
     var lanDiscoveryTimeout = Number(requestOptions.lanDiscoveryTimeout) || 4000;
+    var lanDiscoveryTargets = this.normalizeDiscoveryTargets(requestOptions.lanDiscoveryTargets);
+    var staticLanDevices = this.normalizeStaticLanDevices(requestOptions.lanStaticDevices);
 
     function sendCloudData() {
       self.fetchCloudDevices(apiKey, function (error, devices) {
@@ -49,14 +52,16 @@ module.exports = NodeHelper.create({
     }
 
     if (enableLanControl) {
-      this.discoverLanDevices(lanDiscoveryTimeout, function (lanError, lanDevices) {
+      this.discoverLanDevices(lanDiscoveryTimeout, lanDiscoveryTargets, function (lanError, lanDevices) {
+        var combinedLanDevices = self.addStaticLanDevices(lanDevices, staticLanDevices);
+
         if (lanOnly) {
-          if (lanError) {
+          if (lanError && !combinedLanDevices.length) {
             self.sendDevicesError("LAN discovery failed: " + lanError.message);
             return;
           }
 
-          self.sendDevicesData(lanDevices);
+          self.sendDevicesData(combinedLanDevices);
           return;
         }
 
@@ -71,13 +76,13 @@ module.exports = NodeHelper.create({
             return;
           }
 
-          // If LAN discovery fails, keep cloud behavior unchanged.
-          if (lanError) {
+          // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
+          if (lanError && !combinedLanDevices.length) {
             self.sendDevicesData(cloudDevices);
             return;
           }
 
-          self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevices));
+          self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, combinedLanDevices));
         });
       });
 
@@ -166,12 +171,13 @@ module.exports = NodeHelper.create({
     req.end();
   },
 
-  discoverLanDevices: function (timeoutMs, callback) {
+  discoverLanDevices: function (timeoutMs, targetIps, callback) {
     var socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
     var discovered = [];
     var deviceMap = {};
     var isDone = false;
     var self = this;
+    var normalizedTargets = this.normalizeDiscoveryTargets(targetIps);
 
     function finish(error) {
       if (isDone) {
@@ -240,6 +246,11 @@ module.exports = NodeHelper.create({
       // Multicast + broadcast targets used by Govee LAN implementations.
       socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, LAN_DISCOVERY_GROUP);
       socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, "255.255.255.255");
+
+      // Optional unicast targets for cross-subnet environments.
+      normalizedTargets.forEach(function (targetIp) {
+        socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, targetIp);
+      });
     });
 
     setTimeout(function () {
@@ -289,6 +300,222 @@ module.exports = NodeHelper.create({
       localIp: ip || undefined,
       source: "lan"
     };
+  },
+
+  normalizeDiscoveryTargets: function (targets) {
+    var rawList = [];
+    var expanded = [];
+    var dedupe = {};
+    var isTruncated = false;
+    var self = this;
+
+    if (Array.isArray(targets)) {
+      rawList = targets;
+    } else if (typeof targets === "string") {
+      rawList = [targets];
+    }
+
+    rawList.forEach(function (entry) {
+      String(entry || "").split(",").forEach(function (part) {
+        var value = String(part || "").trim();
+
+        if (!value) {
+          return;
+        }
+
+        self.expandDiscoveryTargetEntry(value).forEach(function (ip) {
+          if (expanded.length >= LAN_DISCOVERY_MAX_UNICAST_TARGETS) {
+            isTruncated = true;
+            return;
+          }
+
+          if (dedupe[ip]) {
+            return;
+          }
+
+          dedupe[ip] = true;
+          expanded.push(ip);
+        });
+      });
+    });
+
+    if (isTruncated) {
+      console.warn("[MMM-GoveeSmartHomeStatus] lanDiscoveryTargets exceeded max of " + LAN_DISCOVERY_MAX_UNICAST_TARGETS + " expanded IPs. Extra entries were ignored.");
+    }
+
+    return expanded;
+  },
+
+  expandDiscoveryTargetEntry: function (entry) {
+    if (entry.indexOf("/") > -1) {
+      return this.expandCidrRange(entry);
+    }
+
+    return this.isValidIpv4(entry) ? [entry] : [];
+  },
+
+  expandCidrRange: function (cidr) {
+    var parts = String(cidr || "").split("/");
+    var baseIp;
+    var prefix;
+    var hostCount;
+    var networkInt;
+    var broadcastInt;
+    var start;
+    var end;
+    var ipList = [];
+    var current;
+
+    if (parts.length !== 2) {
+      return [];
+    }
+
+    baseIp = String(parts[0] || "").trim();
+    prefix = Number(parts[1]);
+
+    if (!this.isValidIpv4(baseIp) || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+      return [];
+    }
+
+    hostCount = Math.pow(2, 32 - prefix);
+    networkInt = Math.floor(this.ipv4ToInt(baseIp) / hostCount) * hostCount;
+    broadcastInt = networkInt + hostCount - 1;
+    start = networkInt;
+    end = broadcastInt;
+
+    // For normal LAN ranges, skip network and broadcast addresses.
+    if (prefix <= 30) {
+      start = networkInt + 1;
+      end = broadcastInt - 1;
+    }
+
+    for (current = start; current <= end; current += 1) {
+      if (ipList.length >= LAN_DISCOVERY_MAX_UNICAST_TARGETS) {
+        break;
+      }
+
+      ipList.push(this.intToIpv4(current));
+    }
+
+    return ipList;
+  },
+
+  isValidIpv4: function (value) {
+    var parts = String(value || "").trim().split(".");
+
+    if (parts.length !== 4) {
+      return false;
+    }
+
+    return parts.every(function (part) {
+      var num;
+
+      if (part === "" || /[^0-9]/.test(part)) {
+        return false;
+      }
+
+      num = Number(part);
+      return Number.isInteger(num) && num >= 0 && num <= 255;
+    });
+  },
+
+  ipv4ToInt: function (ipAddress) {
+    var parts = String(ipAddress || "").split(".");
+
+    return parts.reduce(function (acc, part) {
+      return (acc * 256) + Number(part);
+    }, 0);
+  },
+
+  intToIpv4: function (numericIp) {
+    var value = Number(numericIp);
+    var octet1 = Math.floor(value / 16777216) % 256;
+    var octet2 = Math.floor(value / 65536) % 256;
+    var octet3 = Math.floor(value / 256) % 256;
+    var octet4 = value % 256;
+
+    return [octet1, octet2, octet3, octet4].join(".");
+  },
+
+  normalizeStaticLanDevices: function (devices) {
+    var self = this;
+
+    if (!Array.isArray(devices)) {
+      return [];
+    }
+
+    return devices.map(function (item) {
+      return self.normalizeStaticLanDevice(item);
+    }).filter(function (item) {
+      return item !== null;
+    });
+  },
+
+  normalizeStaticLanDevice: function (raw) {
+    var staticDevice = raw;
+    var deviceId;
+    var ip;
+    var model;
+    var name;
+
+    if (typeof raw === "string") {
+      staticDevice = { ip: raw };
+    }
+
+    if (!staticDevice || typeof staticDevice !== "object") {
+      return null;
+    }
+
+    ip = String(staticDevice.ip || staticDevice.localIp || "").trim();
+    deviceId = String(staticDevice.deviceId || staticDevice.device || ip || "").trim();
+    model = String(staticDevice.model || staticDevice.sku || "").trim();
+    name = String(staticDevice.deviceName || staticDevice.name || "").trim();
+
+    if (!deviceId && !ip) {
+      return null;
+    }
+
+    if (ip && !this.isValidIpv4(ip)) {
+      return null;
+    }
+
+    return {
+      deviceId: deviceId || ip,
+      deviceName: name || (model ? (model + " (Static LAN)") : "Govee LAN Device"),
+      deviceType: "LAN",
+      model: model || "Unknown",
+      roomName: String(staticDevice.roomName || ""),
+      online: staticDevice.online !== false,
+      powerState: undefined,
+      temperature: undefined,
+      humidity: undefined,
+      brightness: undefined,
+      colorTemperature: undefined,
+      color: undefined,
+      localIp: ip || undefined,
+      source: "lan-static"
+    };
+  },
+
+  addStaticLanDevices: function (discovered, staticDevices) {
+    var merged = [];
+    var dedupe = {};
+
+    function pushIfNew(device) {
+      var key = (String(device.deviceId || "") + "::" + String(device.localIp || "")).toLowerCase();
+
+      if (dedupe[key]) {
+        return;
+      }
+
+      dedupe[key] = true;
+      merged.push(device);
+    }
+
+    (Array.isArray(discovered) ? discovered : []).forEach(pushIfNew);
+    (Array.isArray(staticDevices) ? staticDevices : []).forEach(pushIfNew);
+
+    return merged;
   },
 
   mergeLanIntoCloud: function (cloudDevices, lanDevices) {

@@ -31,7 +31,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 
 For LAN Control mode:
 - Enable LAN Control for each device in the Govee app
-- Keep MagicMirror and Govee devices on the same local network/VLAN
+- Keep MagicMirror and Govee devices on the same local network/VLAN, or use cross-subnet targeting options below
 - Allow local UDP multicast/broadcast discovery traffic
 
 **Note:** This module now calls both Govee APIs: the device list endpoint and the per-device state endpoint. With large device counts, lower refresh intervals will consume your daily API quota faster.
@@ -155,7 +155,9 @@ Add to your `config.js`:
     roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
     enableLanControl: false,
     lanOnly: false,
-    lanDiscoveryTimeout: 4000,
+   lanDiscoveryTimeout: 4000,
+   lanDiscoveryTargets: [],           // Optional IPv4/CIDR targets for unicast LAN scan probes
+   lanStaticDevices: [],              // Optional static LAN devices for cross-subnet fallback
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -186,6 +188,8 @@ Add to your `config.js`:
 | `enableLanControl` | Boolean | Enable LAN discovery in addition to cloud API | `false` |
 | `lanOnly` | Boolean | Use LAN discovery only (no API key required) | `false` |
 | `lanDiscoveryTimeout` | Number | LAN discovery timeout in milliseconds | `4000` |
+| `lanDiscoveryTargets` | Array | Optional IPv4 and CIDR target list for unicast LAN discovery probes (for cross-subnet/VLAN environments) | `[]` |
+| `lanStaticDevices` | Array | Optional static LAN device list merged with discovered devices | `[]` |
 | `compactCards` | Boolean | Display devices as compact horizontal cards (scrollable) | `false` |
 | `maxCompactCards` | Number | Maximum number of devices to show in compact card view | `12` |
 | `emptyMessage` | String | Message when no devices available | `"No devices available."` |
@@ -264,6 +268,41 @@ Add to your `config.js`:
 ```
 
 Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you want LAN reachability plus richer cloud state data.
+
+### Cross-Subnet / VLAN Discovery
+```javascript
+{
+    module: "MMM-GoveeSmartHomeStatus",
+    position: "top_right",
+    config: {
+         apiKey: "YOUR_GOVEE_API_KEY",
+         enableLanControl: true,
+         lanOnly: false,
+         lanDiscoveryTimeout: 5000,
+         lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
+         lanStaticDevices: [
+            {
+               ip: "10.0.10.63",
+               deviceId: "05:36:5C:E7:53:E8:F7:24",
+               deviceName: "Kitchen Strip",
+               model: "H1401"
+            },
+            {
+               ip: "10.0.10.97",
+               deviceId: "04:6E:5C:E7:53:CE:51:0E",
+               deviceName: "Desk Lamp",
+               model: "H1401"
+            }
+         ]
+    }
+},
+```
+
+`lanDiscoveryTargets` accepts individual IPv4 addresses and CIDR ranges, and sends unicast scan packets to the expanded IP list in addition to multicast/broadcast.
+
+For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
+
+`lanStaticDevices` adds known devices even when cross-subnet UDP replies are blocked.
 
 ### Compact Cards Layout with Room Summaries
 ```javascript
