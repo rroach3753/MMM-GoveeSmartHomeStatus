@@ -594,7 +594,7 @@ module.exports = NodeHelper.create({
       finish(null, statusDevice);
     });
 
-    socket.bind(function () {
+    socket.bind(LAN_DISCOVERY_LISTEN_PORT, function () {
       socket.send(requestPayload, 0, requestPayload.length, LAN_DEVICE_CONTROL_PORT, device.localIp);
     });
 
