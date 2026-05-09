@@ -17,143 +17,153 @@ module.exports = NodeHelper.create({
     this.cachedEnrichedCloudDevices = [];
     this.lastCloudListFetchAt = 0;
     this.lastCloudStateFetchAt = 0;
-  },
-
-  sendDevicesData: function (devices) {
-    console.log("[DEBUG] Sending devices data to frontend", new Date().toISOString(), "count:", Array.isArray(devices) ? devices.length : 0);
-    this.sendSocketNotification("GOVEE_DEVICES_DATA", {
-      devices: Array.isArray(devices) ? devices : []
-    });
-  },
-
-  sendDevicesError: function (errorMessage) {
-    this.sendSocketNotification("GOVEE_DEVICES_ERROR", {
-      error: String(errorMessage || "Unknown error")
-    });
-  },
-
-  socketNotificationReceived: function (notification, payload) {
-    console.log("[DEBUG] Socket notification received", notification, new Date().toISOString());
-    if (notification === "GOVEE_DEVICES_REQUEST") {
-      this.fetchGoveeDevices(payload || {});
-    }
-  },
-
-  fetchGoveeDevices: function (requestOptions) {
-    var self = this;
-    console.log("[DEBUG] fetchGoveeDevices called", new Date().toISOString());
-    var apiKey = requestOptions.apiKey;
-    var enableLanControl = requestOptions.enableLanControl === true;
-    var lanOnly = requestOptions.lanOnly === true;
-    var lanDiscoveryTimeout = Number(requestOptions.lanDiscoveryTimeout) || 4000;
-    var lanDiscoveryTargets = this.normalizeDiscoveryTargets(requestOptions.lanDiscoveryTargets);
-    var staticLanDevices = this.normalizeStaticLanDevices(requestOptions.lanStaticDevices);
-    var cloudDeviceListRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceListRefreshInterval);
-    var cloudDeviceStateRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceStateRefreshInterval);
-
-    function sendCloudData() {
-      self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
-        if (error) {
-          self.sendDevicesError(error.message);
+    
+    // Initialize a persistent shared socket for all LAN operations
+    this.lanSocket = null;
+    this.lanSocketBound = false;
+    fetchLanDeviceStatuses: function (lanDevices, timeoutMs, callback) {
+      var self = this;
+      var devices = Array.isArray(lanDevices) ? lanDevices.filter(function (device) {
+        return device && device.localIp;
+      }) : [];
+      var timeout = Math.max(1000, Number(timeoutMs) || 4000);
+      var results = new Array(devices.length);
+      var resultReceivedMap = {};
+      var isFinished = false;
+      var socket = this.lanSocket;
+      console.log("[DEBUG] Starting LAN device status fetch for", devices.length, "devices");
+    normalizedTargets.forEach(function (targetIp) {
+      if (!socket || !this.lanSocketBound) {
+        console.log("[DEBUG] LAN socket not ready for status fetch");
+        callback(new Error("LAN socket not ready"));
+        return;
+      }
+      try {
+      function finish() {
+        if (isFinished) {
+          console.log("[DEBUG] fetchLanDeviceStatuses finish() called but already finished");
           return;
         }
+        socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, targetIp);
+        isFinished = true;
 
-        self.sendDevicesData(devices);
-      });
-    }
-
-    if (enableLanControl) {
-      this.discoverLanDevices(lanDiscoveryTimeout, lanDiscoveryTargets, function (lanError, lanDevices) {
-        console.log("[DEBUG] LAN discovery completed", new Date().toISOString(), "error:", lanError ? lanError.message : "none", "devices found:", lanDevices ? lanDevices.length : 0);
-        var combinedLanDevices = self.addStaticLanDevices(lanDevices, staticLanDevices);
-
-        self.fetchLanDeviceStatuses(combinedLanDevices, lanDiscoveryTimeout, function (lanStatusError, statusLanDevices) {
-          console.log("[DEBUG] LAN device statuses fetched", new Date().toISOString(), "error:", lanStatusError ? lanStatusError.message : "none", "devices with status:", statusLanDevices ? statusLanDevices.length : 0);
-          var lanDevicesWithStatus = statusLanDevices;
-
-          if (lanOnly) {
-            if ((lanError || lanStatusError) && !lanDevicesWithStatus.length) {
-              self.sendDevicesError("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"));
-              return;
-            }
-
-            self.sendDevicesData(lanDevicesWithStatus);
-            return;
-          }
-
-          if (!apiKey) {
-            self.sendDevicesError("API key is required unless lanOnly is enabled");
-            return;
-          }
-
-          self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (cloudError, cloudDevices) {
-            if (cloudError) {
-              self.sendDevicesError(cloudError.message);
-              return;
-            }
-
-            // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
-            if (lanError && !lanDevicesWithStatus.length) {
-              self.sendDevicesData(cloudDevices);
-              return;
-            }
-
-            self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus));
-          });
-        });
-      });
-
-      return;
-    }
-
-    if (!apiKey) {
-      self.sendDevicesError("API key is required");
-      return;
-    }
-
-    sendCloudData();
-  },
-
-  normalizeRefreshInterval: function (value) {
-    var parsed = Number(value);
-
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      return 0;
-    }
-
-    return Math.floor(parsed);
-  },
-
-  resetCloudCache: function (apiKey) {
-    this.cloudCacheApiKey = String(apiKey || "");
-    this.cachedCloudDevices = [];
-    this.cachedEnrichedCloudDevices = [];
-    this.lastCloudListFetchAt = 0;
-    this.lastCloudStateFetchAt = 0;
-  },
-
-  ensureCloudCacheForApiKey: function (apiKey) {
-    var currentApiKey = String(apiKey || "");
-
-    if (this.cloudCacheApiKey !== currentApiKey) {
-      this.resetCloudCache(currentApiKey);
-    }
-  },
-
-  fetchCloudDevicesSegmented: function (apiKey, listIntervalMs, stateIntervalMs, callback) {
+        // Remove the status message handler
+        if (statusMessageHandler && socket) {
+          socket.removeListener("message", statusMessageHandler);
+        }
+      } catch (sendError) {
+        console.log("[DEBUG] LAN device statuses finished, returning", results.filter(function (d) { return d !== null; }).length, "device responses");
+        callback(null, results.filter(function (device) {
+          return device !== null;
+        }));
+      }
+        console.log("[DEBUG] Failed to send unicast to", targetIp + ":", sendError.message);
+      if (!devices.length) {
+        callback(null, Array.isArray(lanDevices) ? lanDevices : []);
+        return;
+      }
+      }
+      // Set up status-specific message handler
+      var statusMessageHandler = function (message, rinfo) {
+        var parsed;
+        var statusDevice;
+        var responseIp;
+    });
+        try {
+          parsed = JSON.parse(message.toString("utf8"));
+        } catch (parseError) {
+          return;
+        }
     var self = this;
+        // Only process devStatus responses
+        if (!parsed.msg || parsed.msg.cmd !== "devStatus") {
+          return;
+        }
+    setTimeout(function () {
+        statusDevice = self.normalizeLanDevice(parsed, rinfo);
+        if (!statusDevice) {
+          return;
+        }
+      console.log("[DEBUG] Discovery timeout reached");
+        responseIp = String((rinfo && rinfo.address) || statusDevice.localIp || "").trim();
+      finish(null);
+        // Find the corresponding device in our list by IP and optionally by deviceId
+        devices.forEach(function (device, index) {
+          if (resultReceivedMap[index]) {
+            return; // Already got a result for this index
+          }
+    }, Math.max(1000, timeoutMs || 4000));
+          var expectedIp = String(device.localIp || "").trim();
+          if (expectedIp && responseIp && expectedIp !== responseIp) {
+            return; // IP doesn't match
+          }
+  },
+          var expectedDeviceId = String(device.deviceId || "").trim().toLowerCase();
+          var responseDeviceId = String(statusDevice.deviceId || "").trim().toLowerCase();
     var now = Date.now();
+          // If both IDs are known, require them to match
+          if (expectedDeviceId && responseDeviceId && expectedDeviceId !== responseDeviceId) {
+            return;
+          }
     var listInterval = this.normalizeRefreshInterval(listIntervalMs);
+          // This is a match for this device
+          resultReceivedMap[index] = true;
     var stateInterval = this.normalizeRefreshInterval(stateIntervalMs);
+          if (!statusDevice.deviceId) {
+            statusDevice.deviceId = device.deviceId;
+          }
     var hasCachedList = Array.isArray(this.cachedCloudDevices) && this.cachedCloudDevices.length > 0;
+          if (!statusDevice.deviceName) {
+            statusDevice.deviceName = device.deviceName;
+          }
     var hasCachedEnriched = Array.isArray(this.cachedEnrichedCloudDevices) && this.cachedEnrichedCloudDevices.length > 0;
+          if (!statusDevice.localIp) {
+            statusDevice.localIp = device.localIp;
+          }
     var shouldFetchList;
+          statusDevice.roomName = device.roomName || statusDevice.roomName;
+          statusDevice.model = device.model || statusDevice.model;
+          statusDevice.deviceType = device.deviceType || statusDevice.deviceType;
+          statusDevice.source = device.source || statusDevice.source;
     var shouldFetchState;
+          results[index] = statusDevice;
+          console.log("[DEBUG] Matched device status for device", index, statusDevice.deviceId, "from", responseIp);
+        });
+      };
 
+      // Add the status message handler to the shared socket
+      socket.on("message", statusMessageHandler);
     function done(error, devices) {
+      console.log("[DEBUG] Sending devStatus probes to", devices.length, "devices");
+      // Send devStatus probe to all devices in parallel
+      var requestPayload = Buffer.from(JSON.stringify({
+        msg: {
+          cmd: "devStatus",
+          data: {}
+        }
+      }));
       callback(error || null, Array.isArray(devices) ? devices : []);
+      devices.forEach(function (device) {
+        try {
+          socket.send(requestPayload, 0, requestPayload.length, LAN_DEVICE_CONTROL_PORT, device.localIp);
+        } catch (sendError) {
+          console.log("[DEBUG] Failed to send devStatus to", device.localIp + ":", sendError.message);
+        }
+      });
     }
+      // Set overall timeout for all probes
+      setTimeout(function () {
+        console.log("[DEBUG] LAN fetch timeout reached, had received", Object.keys(resultReceivedMap).length, "responses");
+        // Fill in any missing results with original device data (no response received)
+        devices.forEach(function (device, index) {
+          if (!resultReceivedMap[index] && results[index] === undefined) {
+            results[index] = device;
+          }
+        });
 
+        finish();
+      }, timeout);
+    },
     function updateStatesForDevices(baseDevices) {
       self.fetchDeviceStates(apiKey, baseDevices, function (enrichedDevices) {
         self.cachedEnrichedCloudDevices = Array.isArray(enrichedDevices) ? enrichedDevices : [];
