@@ -469,17 +469,28 @@ module.exports = NodeHelper.create({
     var devices = Array.isArray(lanDevices) ? lanDevices.filter(function (device) {
       return device && device.localIp;
     }) : [];
-    var completed = 0;
+    var timeout = Math.max(1000, Number(timeoutMs) || 4000);
     var results = new Array(devices.length);
-    var hasStarted = false;
+    var resultReceivedMap = {};
+    var sharedSocket = null;
+    var isFinished = false;
 
-    function finish(error) {
-      if (hasStarted === null) {
+    function finish() {
+      if (isFinished) {
         return;
       }
 
-      hasStarted = null;
-      callback(error || null, results.filter(function (device) {
+      isFinished = true;
+
+      if (sharedSocket) {
+        try {
+          sharedSocket.close();
+        } catch (closeError) {
+          // noop
+        }
+      }
+
+      callback(null, results.filter(function (device) {
         return device !== null;
       }));
     }
@@ -489,63 +500,17 @@ module.exports = NodeHelper.create({
       return;
     }
 
-    hasStarted = true;
+    // Create a single shared listener socket for all device probes
+    sharedSocket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
-    devices.forEach(function (device, index) {
-      self.fetchLanDeviceStatus(device, timeoutMs, function (error, statusDevice) {
-        if (error) {
-          results[index] = device;
-        } else {
-          results[index] = statusDevice || device;
-        }
-
-        completed += 1;
-        if (completed === devices.length) {
-          finish(null);
-        }
-      });
-    });
-  },
-
-  fetchLanDeviceStatus: function (device, timeoutMs, callback) {
-    var socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
-    var isDone = false;
-    var self = this;
-    var timeout = Math.max(1000, Number(timeoutMs) || 2000);
-    var requestPayload = Buffer.from(JSON.stringify({
-      msg: {
-        cmd: "devStatus",
-        data: {}
-      }
-    }));
-
-    function finish(error, statusDevice) {
-      if (isDone) {
-        return;
-      }
-
-      isDone = true;
-
-      try {
-        socket.close();
-      } catch (closeError) {
-        // noop
-      }
-
-      callback(error || null, statusDevice || null);
-    }
-
-    socket.on("error", function (error) {
-      finish(error, null);
+    sharedSocket.on("error", function (error) {
+      finish();
     });
 
-    socket.on("message", function (message, rinfo) {
+    sharedSocket.on("message", function (message, rinfo) {
       var parsed;
       var statusDevice;
       var responseIp;
-      var expectedIp;
-      var expectedDeviceId;
-      var responseDeviceId;
 
       try {
         parsed = JSON.parse(message.toString("utf8"));
@@ -559,47 +524,74 @@ module.exports = NodeHelper.create({
       }
 
       responseIp = String((rinfo && rinfo.address) || statusDevice.localIp || "").trim();
-      expectedIp = String(device.localIp || "").trim();
 
-      // Ignore replies from other hosts while probing a specific target.
-      if (expectedIp && responseIp && expectedIp !== responseIp) {
-        return;
-      }
+      // Find the corresponding device in our list by IP and optionally by deviceId
+      devices.forEach(function (device, index) {
+        if (resultReceivedMap[index]) {
+          return; // Already got a result for this index
+        }
 
-      expectedDeviceId = String(device.deviceId || "").trim().toLowerCase();
-      responseDeviceId = String(statusDevice.deviceId || "").trim().toLowerCase();
+        var expectedIp = String(device.localIp || "").trim();
+        if (expectedIp && responseIp && expectedIp !== responseIp) {
+          return; // IP doesn't match
+        }
 
-      // If both IDs are known, require them to match.
-      if (expectedDeviceId && responseDeviceId && expectedDeviceId !== responseDeviceId) {
-        return;
-      }
+        var expectedDeviceId = String(device.deviceId || "").trim().toLowerCase();
+        var responseDeviceId = String(statusDevice.deviceId || "").trim().toLowerCase();
 
-      if (!statusDevice.deviceId) {
-        statusDevice.deviceId = device.deviceId;
-      }
+        // If both IDs are known, require them to match
+        if (expectedDeviceId && responseDeviceId && expectedDeviceId !== responseDeviceId) {
+          return;
+        }
 
-      if (!statusDevice.deviceName) {
-        statusDevice.deviceName = device.deviceName;
-      }
+        // This is a match for this device
+        resultReceivedMap[index] = true;
 
-      if (!statusDevice.localIp) {
-        statusDevice.localIp = device.localIp;
-      }
+        if (!statusDevice.deviceId) {
+          statusDevice.deviceId = device.deviceId;
+        }
 
-      statusDevice.roomName = device.roomName || statusDevice.roomName;
-      statusDevice.model = device.model || statusDevice.model;
-      statusDevice.deviceType = device.deviceType || statusDevice.deviceType;
-      statusDevice.source = device.source || statusDevice.source;
+        if (!statusDevice.deviceName) {
+          statusDevice.deviceName = device.deviceName;
+        }
 
-      finish(null, statusDevice);
+        if (!statusDevice.localIp) {
+          statusDevice.localIp = device.localIp;
+        }
+
+        statusDevice.roomName = device.roomName || statusDevice.roomName;
+        statusDevice.model = device.model || statusDevice.model;
+        statusDevice.deviceType = device.deviceType || statusDevice.deviceType;
+        statusDevice.source = device.source || statusDevice.source;
+
+        results[index] = statusDevice;
+      });
     });
 
-    socket.bind(LAN_DISCOVERY_LISTEN_PORT, function () {
-      socket.send(requestPayload, 0, requestPayload.length, LAN_DEVICE_CONTROL_PORT, device.localIp);
+    sharedSocket.bind(LAN_DISCOVERY_LISTEN_PORT, function () {
+      // Send devStatus probe to all devices in parallel
+      var requestPayload = Buffer.from(JSON.stringify({
+        msg: {
+          cmd: "devStatus",
+          data: {}
+        }
+      }));
+
+      devices.forEach(function (device) {
+        sharedSocket.send(requestPayload, 0, requestPayload.length, LAN_DEVICE_CONTROL_PORT, device.localIp);
+      });
     });
 
+    // Set overall timeout for all probes
     setTimeout(function () {
-      finish(null, device);
+      // Fill in any missing results with original device data (no response received)
+      devices.forEach(function (device, index) {
+        if (!resultReceivedMap[index] && results[index] === undefined) {
+          results[index] = device;
+        }
+      });
+
+      finish();
     }, timeout);
   },
 
