@@ -3,6 +3,9 @@ const https = require("node:https");
 const dgram = require("node:dgram");
 
 const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
+const LAN_DISCOVERY_GROUP = "239.255.255.250";
+const LAN_DISCOVERY_SEND_PORT = 4001;
+const LAN_DISCOVERY_LISTEN_PORT = 4002;
 
 module.exports = NodeHelper.create({
   start: function () {
@@ -164,7 +167,7 @@ module.exports = NodeHelper.create({
   },
 
   discoverLanDevices: function (timeoutMs, callback) {
-    var socket = dgram.createSocket("udp4");
+    var socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
     var discovered = [];
     var deviceMap = {};
     var isDone = false;
@@ -215,7 +218,7 @@ module.exports = NodeHelper.create({
       discovered.push(lanDevice);
     });
 
-    socket.bind(function () {
+    socket.bind(LAN_DISCOVERY_LISTEN_PORT, function () {
       var payload = Buffer.from(JSON.stringify({
         msg: {
           cmd: "scan",
@@ -225,12 +228,18 @@ module.exports = NodeHelper.create({
         }
       }));
 
+      socket.setMulticastTTL(2);
       socket.setBroadcast(true);
 
+      try {
+        socket.addMembership(LAN_DISCOVERY_GROUP);
+      } catch (membershipError) {
+        // Membership may fail on some interfaces but multicast send can still work.
+      }
+
       // Multicast + broadcast targets used by Govee LAN implementations.
-      socket.send(payload, 0, payload.length, 4001, "239.255.255.250");
-      socket.send(payload, 0, payload.length, 4001, "255.255.255.255");
-      socket.send(payload, 0, payload.length, 4002, "239.255.255.250");
+      socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, LAN_DISCOVERY_GROUP);
+      socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, "255.255.255.255");
     });
 
     setTimeout(function () {
@@ -254,8 +263,8 @@ module.exports = NodeHelper.create({
       return null;
     }
 
-    // Ignore packets missing key identity fields.
-    if (!deviceId || !sku || !ip) {
+    // Ignore packets missing all useful identity fields.
+    if (!ip && !deviceId) {
       return null;
     }
 
@@ -265,10 +274,10 @@ module.exports = NodeHelper.create({
     }
 
     return {
-      deviceId: deviceId,
+      deviceId: deviceId || ip,
       deviceName: name || (sku ? (sku + " (LAN)") : "Govee LAN Device"),
       deviceType: "LAN",
-      model: sku,
+      model: sku || "Unknown",
       roomName: "",
       online: true,
       powerState: undefined,
