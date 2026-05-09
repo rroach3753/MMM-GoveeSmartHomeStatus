@@ -47,6 +47,9 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   requestBackendData: function () {
     var self = this;
+    var requestTimeout = this.getRequestTimeout();
+
+    this.dataState.loading = true;
 
     this.sendSocketNotification("GOVEE_DEVICES_REQUEST", {
       apiKey: this.config.apiKey,
@@ -72,7 +75,13 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         self.dataState.error = "Unable to fetch Govee device data. Check API key and connection.";
         self.updateDom(300);
       }
-    }, 5000);
+    }, requestTimeout);
+  },
+
+  getRequestTimeout: function () {
+    var lanWindow = this.config.enableLanControl ? Math.max(1000, Number(this.config.lanDiscoveryTimeout) || 4000) * 2 : 0;
+
+    return Math.max(5000, lanWindow + 5000);
   },
 
   socketNotificationReceived: function (notification, payload) {
