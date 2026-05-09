@@ -12,6 +12,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Display list of Govee smart devices with live online and power state
 - Display temperature and humidity when the device reports them
 - Color-coded online/offline status indicators
+- Source badges for connectivity path: `CLOUD`, `LAN`, and `LAN+`
 - Real-time device list updates
 - Configurable refresh interval
 - Full-width bottom bar layout option for compact device display
@@ -155,7 +156,7 @@ Add to your `config.js`:
     roomSummaryLightsOnly: false,      // Include all devices in room summary
     lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led"],
     hideAppliances: true,              // Hide appliance devices by keyword
-    hiddenApplianceKeywords: ["ice maker", "fridge"],
+   hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
     roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
     enableLanControl: false,
     lanOnly: false,
@@ -164,6 +165,8 @@ Add to your `config.js`:
    lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
    cloudDeviceListRefreshInterval: 0,  // 0 = fetch cloud device list every module refresh
    cloudDeviceStateRefreshInterval: 0, // 0 = fetch cloud state every module refresh
+   compactCards: false,
+   maxCompactCards: 12,
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -295,6 +298,30 @@ Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you wan
 
 With segmented refresh enabled, set `refreshInterval` to your fastest desired update cadence (usually the cloud state interval).
 
+### Recommended: Fast LAN + Conservative Cloud
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "bottom_bar",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      compactCards: true,
+      maxCompactCards: 30,
+      showRoomSummary: true,
+      showLightsSummary: true,
+      refreshInterval: 30000,                 // UI/LAN cadence every 30s
+      enableLanControl: true,
+      lanOnly: false,
+      lanDiscoveryTimeout: 5000,
+      lanDiscoveryTargets: ["10.0.10.0/24"],
+      cloudDeviceListRefreshInterval: 28800000, // Cloud list every 8h
+      cloudDeviceStateRefreshInterval: 600000   // Cloud state every 10m
+   }
+},
+```
+
+This profile keeps local card responsiveness high while reducing cloud API calls.
+
 ### Cross-Subnet / VLAN Discovery
 ```javascript
 {
@@ -368,6 +395,7 @@ This layout displays:
 - **Device Grid** — Compact 3-column card layout showing all devices with name and power state (ON/OFF)
   - Green border indicates powered ON devices
   - Gray border indicates powered OFF devices
+   - Source badge shows `LAN+` (cloud+LAN merged), `LAN` (LAN-only), or `CLOUD` (cloud-only)
   - Perfect for side panels (bottom_right, top_right, etc.)
 
 ## Customizing Light Detection
