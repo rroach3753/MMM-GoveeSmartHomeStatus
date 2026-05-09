@@ -64,6 +64,20 @@
   flex: 1;
 }
 
+.lan-status-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #7dd3fc;
+  border: 1px solid rgba(125, 211, 252, 0.55);
+  background-color: rgba(125, 211, 252, 0.12);
+  vertical-align: middle;
+}
+
 .device-status {
   font-size: 14px;
   color: #aaa;
@@ -276,6 +290,12 @@
   margin-left: 4px;
 }
 
+.mmm-govee-smartHome.full-width-bottom-bar .lan-status-badge {
+  margin-left: 6px;
+  padding: 1px 4px;
+  font-size: 8px;
+}
+
 .mmm-govee-smartHome.full-width-bottom-bar .device-detail {
   display: none;
 }
@@ -337,6 +357,19 @@
   margin-top: 2px;
 }
 
+.compact-lan-status-badge {
+  margin-top: 2px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #7dd3fc;
+  border: 1px solid rgba(125, 211, 252, 0.55);
+  background-color: rgba(125, 211, 252, 0.12);
+  line-height: 1;
+}
+
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact {
   grid-auto-flow: row;
   justify-content: stretch;
@@ -370,4 +403,10 @@
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-power {
   font-size: 8.5px;
   margin-top: 1px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .compact-lan-status-badge {
+  margin-top: 1px;
+  padding: 1px 3px;
+  font-size: 7px;
 }

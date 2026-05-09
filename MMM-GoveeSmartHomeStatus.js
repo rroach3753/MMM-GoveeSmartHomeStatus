@@ -206,6 +206,14 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         nameDiv.className = "device-name";
         nameDiv.textContent = device.deviceName || "Unknown Device";
 
+        var lanBadgeLabel = this.getLanBadgeLabel(device);
+        if (lanBadgeLabel) {
+          var lanBadge = document.createElement("span");
+          lanBadge.className = "lan-status-badge";
+          lanBadge.textContent = lanBadgeLabel;
+          nameDiv.appendChild(lanBadge);
+        }
+
         // Device status
         var statusDiv = document.createElement("div");
         statusDiv.className = "device-status";
@@ -294,6 +302,14 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       nameDiv.textContent = device.deviceName || "Unknown";
       card.appendChild(nameDiv);
 
+      var compactLanBadgeLabel = this.getLanBadgeLabel(device);
+      if (compactLanBadgeLabel) {
+        var compactLanBadge = document.createElement("div");
+        compactLanBadge.className = "compact-lan-status-badge";
+        compactLanBadge.textContent = compactLanBadgeLabel;
+        card.appendChild(compactLanBadge);
+      }
+
       if (this.config.showPower && typeof device.powerState !== "undefined") {
         var powerDiv = document.createElement("div");
         powerDiv.className = "compact-card-power";
@@ -305,6 +321,22 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }.bind(this));
 
     return wrapper;
+  },
+
+  getLanBadgeLabel: function (device) {
+    if (!device || !device.source) {
+      return "";
+    }
+
+    if (device.source === "cloud+lan") {
+      return "LAN+";
+    }
+
+    if (device.source === "lan") {
+      return "LAN";
+    }
+
+    return "";
   },
 
   getFilteredDevices: function (devices) {
