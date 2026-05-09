@@ -20,7 +20,6 @@ module.exports = NodeHelper.create({
   },
 
   sendDevicesData: function (devices) {
-    console.log("[DEBUG] Sending devices data to frontend", new Date().toISOString(), "count:", Array.isArray(devices) ? devices.length : 0);
     this.sendSocketNotification("GOVEE_DEVICES_DATA", {
       devices: Array.isArray(devices) ? devices : []
     });
@@ -33,7 +32,6 @@ module.exports = NodeHelper.create({
   },
 
   socketNotificationReceived: function (notification, payload) {
-    console.log("[DEBUG] Socket notification received", notification, new Date().toISOString());
     if (notification === "GOVEE_DEVICES_REQUEST") {
       this.fetchGoveeDevices(payload || {});
     }
@@ -41,7 +39,6 @@ module.exports = NodeHelper.create({
 
   fetchGoveeDevices: function (requestOptions) {
     var self = this;
-    console.log("[DEBUG] fetchGoveeDevices called", new Date().toISOString());
     var apiKey = requestOptions.apiKey;
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
@@ -64,11 +61,9 @@ module.exports = NodeHelper.create({
 
     if (enableLanControl) {
       this.discoverLanDevices(lanDiscoveryTimeout, lanDiscoveryTargets, function (lanError, lanDevices) {
-        console.log("[DEBUG] LAN discovery completed", new Date().toISOString(), "error:", lanError ? lanError.message : "none", "devices found:", lanDevices ? lanDevices.length : 0);
         var combinedLanDevices = self.addStaticLanDevices(lanDevices, staticLanDevices);
 
         self.fetchLanDeviceStatuses(combinedLanDevices, lanDiscoveryTimeout, function (lanStatusError, statusLanDevices) {
-          console.log("[DEBUG] LAN device statuses fetched", new Date().toISOString(), "error:", lanStatusError ? lanStatusError.message : "none", "devices with status:", statusLanDevices ? statusLanDevices.length : 0);
           var lanDevicesWithStatus = statusLanDevices;
 
           if (lanOnly) {
@@ -325,11 +320,9 @@ module.exports = NodeHelper.create({
     var isDone = false;
     var self = this;
     var normalizedTargets = this.normalizeDiscoveryTargets(targetIps);
-    console.log("[DEBUG] Starting LAN discovery, will send to", normalizedTargets.length, "targets");
 
     function finish(error) {
       if (isDone) {
-        console.log("[DEBUG] finish() called but already done");
         return;
       }
 
@@ -341,12 +334,10 @@ module.exports = NodeHelper.create({
         // noop
       }
 
-      console.log("[DEBUG] LAN discovery finished, returning", discovered.length, "devices, error:", error ? error.message : "none");
       callback(error || null, discovered);
     }
 
     socket.on("error", function (error) {
-      console.log("[DEBUG] Socket error in discovery:", error.message);
       finish(error);
     });
 
@@ -373,11 +364,9 @@ module.exports = NodeHelper.create({
 
       deviceMap[uniqueKey] = true;
       discovered.push(lanDevice);
-      console.log("[DEBUG] Discovered device:", lanDevice.deviceId, "at", lanDevice.localIp);
     });
 
     socket.bind(LAN_DISCOVERY_LISTEN_PORT, function () {
-      console.log("[DEBUG] Discovery socket bound to port", LAN_DISCOVERY_LISTEN_PORT);
       var payload = Buffer.from(JSON.stringify({
         msg: {
           cmd: "scan",
@@ -390,18 +379,15 @@ module.exports = NodeHelper.create({
       socket.setMulticastTTL(2);
       try {
         socket.addMembership(LAN_DISCOVERY_GROUP);
-        console.log("[DEBUG] Added multicast membership");
       } catch (membershipError) {
-        console.log("[DEBUG] Multicast membership failed (OK for some interfaces):", membershipError.message);
         // Membership may fail on some interfaces but multicast send can still work.
       }
 
       // Multicast target used by Govee LAN implementations.
       try {
         socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, LAN_DISCOVERY_GROUP);
-        console.log("[DEBUG] Sent multicast discovery to", LAN_DISCOVERY_GROUP + ":" + LAN_DISCOVERY_SEND_PORT);
       } catch (sendError) {
-        console.log("[DEBUG] Failed to send multicast:", sendError.message);
+        // Ignore send failures here and let timeout-based fallback handle it.
       }
 
       // Optional unicast targets for cross-subnet environments.
@@ -409,13 +395,12 @@ module.exports = NodeHelper.create({
         try {
           socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, targetIp);
         } catch (sendError) {
-          console.log("[DEBUG] Failed to send unicast to", targetIp + ":", sendError.message);
+          // Ignore individual unicast send failures and continue probing.
         }
       });
     });
 
     setTimeout(function () {
-      console.log("[DEBUG] Discovery timeout reached");
       finish(null);
     }, Math.max(1000, timeoutMs || 4000));
   },
@@ -497,11 +482,9 @@ module.exports = NodeHelper.create({
     var resultReceivedMap = {};
     var sharedSocket = null;
     var isFinished = false;
-    console.log("[DEBUG] Starting LAN device status fetch for", devices.length, "devices");
 
     function finish() {
       if (isFinished) {
-        console.log("[DEBUG] fetchLanDeviceStatuses finish() called but already finished");
         return;
       }
 
@@ -515,7 +498,6 @@ module.exports = NodeHelper.create({
         }
       }
 
-      console.log("[DEBUG] LAN device statuses finished, returning", results.filter(function (d) { return d !== null; }).length, "device responses");
       callback(null, results.filter(function (device) {
         return device !== null;
       }));
@@ -530,7 +512,6 @@ module.exports = NodeHelper.create({
     sharedSocket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
     sharedSocket.on("error", function (error) {
-      console.log("[DEBUG] fetchLanDeviceStatuses socket error:", error.message);
       finish();
     });
 
@@ -592,12 +573,10 @@ module.exports = NodeHelper.create({
         statusDevice.source = device.source || statusDevice.source;
 
         results[index] = statusDevice;
-        console.log("[DEBUG] Matched device status for device", index, statusDevice.deviceId, "from", responseIp);
       });
     });
 
     sharedSocket.bind(LAN_DISCOVERY_LISTEN_PORT, function () {
-      console.log("[DEBUG] Status fetch socket bound to port", LAN_DISCOVERY_LISTEN_PORT, "- sending probes to", devices.length, "devices");
       // Send devStatus probe to all devices in parallel
       var requestPayload = Buffer.from(JSON.stringify({
         msg: {
@@ -610,14 +589,13 @@ module.exports = NodeHelper.create({
         try {
           sharedSocket.send(requestPayload, 0, requestPayload.length, LAN_DEVICE_CONTROL_PORT, device.localIp);
         } catch (sendError) {
-          console.log("[DEBUG] Failed to send devStatus to", device.localIp + ":", sendError.message);
+          // Ignore individual send failures and let timeout handling fall back.
         }
       });
     });
 
     // Set overall timeout for all probes
     setTimeout(function () {
-      console.log("[DEBUG] LAN fetch timeout reached, had received", Object.keys(resultReceivedMap).length, "responses");
       // Fill in any missing results with original device data (no response received)
       devices.forEach(function (device, index) {
         if (!resultReceivedMap[index] && results[index] === undefined) {
