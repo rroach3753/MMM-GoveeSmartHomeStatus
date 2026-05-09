@@ -547,7 +547,8 @@ module.exports = NodeHelper.create({
         }
 
         var expectedDeviceId = String(device.deviceId || "").trim().toLowerCase();
-        var responseDeviceId = String(responseData.device || responseData.deviceId || parsed.device || "").trim().toLowerCase();
+        var responseDeviceIdRaw = String(responseData.device || responseData.deviceId || parsed.device || "").trim();
+        var responseDeviceId = responseDeviceIdRaw.toLowerCase();
 
         // Only enforce ID matching when the response explicitly reports one.
         if (expectedDeviceId && responseDeviceId && expectedDeviceId !== responseDeviceId) {
@@ -557,9 +558,8 @@ module.exports = NodeHelper.create({
         // This is a match for this device
         resultReceivedMap[index] = true;
 
-        if (!statusDevice.deviceId) {
-          statusDevice.deviceId = device.deviceId;
-        }
+        // devStatus replies often omit device ID; preserve discovered ID for cloud merge/LAN+ labeling.
+        statusDevice.deviceId = responseDeviceIdRaw || device.deviceId || statusDevice.deviceId;
 
         if (!statusDevice.deviceName) {
           statusDevice.deviceName = device.deviceName;
