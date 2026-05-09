@@ -156,8 +156,8 @@ Add to your `config.js`:
     enableLanControl: false,
     lanOnly: false,
    lanDiscoveryTimeout: 4000,
-   lanDiscoveryTargets: [],           // Optional IPv4/CIDR targets for unicast LAN scan probes
-   lanStaticDevices: [],              // Optional static LAN devices for cross-subnet fallback
+   lanDiscoveryTargets: [],            // Optional IPv4/CIDR targets for unicast LAN scan probes
+   lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -272,29 +272,29 @@ Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you wan
 ### Cross-Subnet / VLAN Discovery
 ```javascript
 {
-    module: "MMM-GoveeSmartHomeStatus",
-    position: "top_right",
-    config: {
-         apiKey: "YOUR_GOVEE_API_KEY",
-         enableLanControl: true,
-         lanOnly: false,
-         lanDiscoveryTimeout: 5000,
-         lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
-         lanStaticDevices: [
-            {
-               ip: "10.0.10.63",
-               deviceId: "05:36:5C:E7:53:E8:F7:24",
-               deviceName: "Kitchen Strip",
-               model: "H1401"
-            },
-            {
-               ip: "10.0.10.97",
-               deviceId: "04:6E:5C:E7:53:CE:51:0E",
-               deviceName: "Desk Lamp",
-               model: "H1401"
-            }
-         ]
-    }
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "top_right",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      enableLanControl: true,
+      lanOnly: false,
+      lanDiscoveryTimeout: 5000,
+      lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
+      lanStaticDevices: [
+         {
+            ip: "10.0.10.63",
+            deviceId: "05:36:5C:E7:53:E8:F7:24",
+            deviceName: "Kitchen Strip",
+            model: "H1401"
+         },
+         {
+            ip: "10.0.10.97",
+            deviceId: "04:6E:5C:E7:53:CE:51:0E",
+            deviceName: "Desk Lamp",
+            model: "H1401"
+         }
+      ]
+   }
 },
 ```
 
