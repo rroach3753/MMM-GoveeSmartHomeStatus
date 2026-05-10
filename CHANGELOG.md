@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+- Added instance-scoped socket payload routing (`instanceId`) between frontend and node helper to reduce cross-instance data mixing.
+- Added response-size guards (1 MB cap) for cloud API handlers to prevent unbounded memory growth on malformed/oversized responses.
+
+### Changed
+- Added `lint` npm script in `package.json` for consistent static checks across module updates.
+
 ## [1.1.0] - 2026-05-08
 
 ### Added

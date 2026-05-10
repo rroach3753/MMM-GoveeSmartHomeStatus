@@ -4,6 +4,9 @@
   "description": "MagicMirror module for displaying Govee smart home device status and control",
   "type": "commonjs",
   "main": "MMM-GoveeSmartHomeStatus.js",
+  "scripts": {
+    "lint": "eslint ."
+  },
   "author": "Rick Roach",
   "license": "MIT",
   "keywords": [

@@ -19,14 +19,16 @@ module.exports = NodeHelper.create({
     this.lastCloudStateFetchAt = 0;
   },
 
-  sendDevicesData: function (devices) {
+  sendDevicesData: function (devices, instanceId) {
     this.sendSocketNotification("GOVEE_DEVICES_DATA", {
+      instanceId: instanceId || null,
       devices: Array.isArray(devices) ? devices : []
     });
   },
 
-  sendDevicesError: function (errorMessage) {
+  sendDevicesError: function (errorMessage, instanceId) {
     this.sendSocketNotification("GOVEE_DEVICES_ERROR", {
+      instanceId: instanceId || null,
       error: String(errorMessage || "Unknown error")
     });
   },
@@ -39,6 +41,7 @@ module.exports = NodeHelper.create({
 
   fetchGoveeDevices: function (requestOptions) {
     var self = this;
+    var instanceId = requestOptions.instanceId || null;
     var apiKey = requestOptions.apiKey;
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
@@ -51,11 +54,11 @@ module.exports = NodeHelper.create({
     function sendCloudData() {
       self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
         if (error) {
-          self.sendDevicesError(error.message);
+          self.sendDevicesError(error.message, instanceId);
           return;
         }
 
-        self.sendDevicesData(devices);
+        self.sendDevicesData(devices, instanceId);
       });
     }
 
@@ -68,32 +71,32 @@ module.exports = NodeHelper.create({
 
           if (lanOnly) {
             if ((lanError || lanStatusError) && !lanDevicesWithStatus.length) {
-              self.sendDevicesError("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"));
+              self.sendDevicesError("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"), instanceId);
               return;
             }
 
-            self.sendDevicesData(lanDevicesWithStatus);
+            self.sendDevicesData(lanDevicesWithStatus, instanceId);
             return;
           }
 
           if (!apiKey) {
-            self.sendDevicesError("API key is required unless lanOnly is enabled");
+            self.sendDevicesError("API key is required unless lanOnly is enabled", instanceId);
             return;
           }
 
           self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (cloudError, cloudDevices) {
             if (cloudError) {
-              self.sendDevicesError(cloudError.message);
+              self.sendDevicesError(cloudError.message, instanceId);
               return;
             }
 
             // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
             if (lanError && !lanDevicesWithStatus.length) {
-              self.sendDevicesData(cloudDevices);
+              self.sendDevicesData(cloudDevices, instanceId);
               return;
             }
 
-            self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus));
+            self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus), instanceId);
           });
         });
       });
@@ -102,7 +105,7 @@ module.exports = NodeHelper.create({
     }
 
     if (!apiKey) {
-      self.sendDevicesError("API key is required");
+      self.sendDevicesError("API key is required", instanceId);
       return;
     }
 
@@ -218,12 +221,21 @@ module.exports = NodeHelper.create({
 
     var req = https.request(options, function (res) {
       var data = "";
+      var exceededLimit = false;
 
       res.on("data", function (chunk) {
         data += chunk;
+        if (data.length > 1048576) {
+          exceededLimit = true;
+          req.destroy(new Error("Response body exceeded 1 MB limit"));
+        }
       });
 
       res.on("end", function () {
+        if (exceededLimit) {
+          return;
+        }
+
         try {
           if (res.statusCode === 200) {
             var jsonData = JSON.parse(data);
@@ -962,12 +974,21 @@ module.exports = NodeHelper.create({
 
     var req = https.request(options, function (res) {
       var data = "";
+      var exceededLimit = false;
 
       res.on("data", function (chunk) {
         data += chunk;
+        if (data.length > 1048576) {
+          exceededLimit = true;
+          req.destroy(new Error("Response body exceeded 1 MB limit"));
+        }
       });
 
       res.on("end", function () {
+        if (exceededLimit) {
+          return;
+        }
+
         var jsonData;
 
         if (res.statusCode !== 200) {

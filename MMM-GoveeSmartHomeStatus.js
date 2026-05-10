@@ -33,6 +33,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   },
 
   start: function () {
+    this.instanceId = this.identifier || this.name;
     this.dataState = {
       devices: [],
       fetchedAt: null,
@@ -52,6 +53,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     this.dataState.loading = true;
 
     this.sendSocketNotification("GOVEE_DEVICES_REQUEST", {
+      instanceId: this.instanceId,
       apiKey: this.config.apiKey,
       enableLanControl: this.config.enableLanControl,
       lanOnly: this.config.lanOnly,
@@ -86,11 +88,16 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   socketNotificationReceived: function (notification, payload) {
     var self = this;
+    var data = payload || {};
+
+    if (data.instanceId && data.instanceId !== this.instanceId) {
+      return;
+    }
 
     if (notification === "GOVEE_DEVICES_DATA") {
       this.dataState.loading = false;
       this.dataState.error = null;
-      this.dataState.devices = payload.devices || [];
+      this.dataState.devices = data.devices || [];
       this.dataState.fetchedAt = new Date();
       this.configRetryCount = 0; // Reset retry count on success
 
@@ -111,7 +118,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       }
     } else if (notification === "GOVEE_DEVICES_ERROR") {
       this.dataState.loading = false;
-      this.dataState.error = payload.error || this.config.errorMessage;
+      this.dataState.error = data.error || this.config.errorMessage;
       this.dataState.devices = [];
 
       if (this.refreshTimer) {
