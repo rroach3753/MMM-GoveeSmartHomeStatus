@@ -17,6 +17,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Configurable refresh interval
 - Full-width bottom bar layout option for compact device display
 - **Compact multi-column card grid layout** with 3-4 cards per row (ideal for side panels)
+- Compact cards sorted by room name, then device name
 - Lights summary showing on/off counts for detected lights
 - Room summary showing on/total devices by room
 - Customizable light detection keywords

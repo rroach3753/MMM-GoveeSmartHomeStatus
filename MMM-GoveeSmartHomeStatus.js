@@ -290,7 +290,8 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   createCompactCardList: function (devices) {
     var maxCards = Number(this.config.maxCompactCards) || 12;
-    var devicesToShow = devices.slice(0, maxCards);
+    var sortedDevices = this.sortDevicesForCards(devices);
+    var devicesToShow = sortedDevices.slice(0, maxCards);
 
     var wrapper = document.createElement("div");
     wrapper.className = "compact-card-list";
@@ -343,6 +344,30 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }.bind(this));
 
     return wrapper;
+  },
+
+  sortDevicesForCards: function (devices) {
+    var self = this;
+
+    return (Array.isArray(devices) ? devices.slice() : []).sort(function (left, right) {
+      var leftRoom = self.inferRoomName(left);
+      var rightRoom = self.inferRoomName(right);
+      var leftUnassigned = leftRoom === "Unassigned";
+      var rightUnassigned = rightRoom === "Unassigned";
+      var roomCompare;
+
+      // Keep unassigned devices grouped at the end.
+      if (leftUnassigned !== rightUnassigned) {
+        return leftUnassigned ? 1 : -1;
+      }
+
+      roomCompare = leftRoom.localeCompare(rightRoom, undefined, { sensitivity: "base" });
+      if (roomCompare !== 0) {
+        return roomCompare;
+      }
+
+      return String((left && left.deviceName) || "").localeCompare(String((right && right.deviceName) || ""), undefined, { sensitivity: "base" });
+    });
   },
 
   getLanBadgeLabel: function (device) {
