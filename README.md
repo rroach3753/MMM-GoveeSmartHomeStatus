@@ -156,17 +156,17 @@ Add to your `config.js`:
     roomSummaryLightsOnly: false,      // Include all devices in room summary
     lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led"],
     hideAppliances: true,              // Hide appliance devices by keyword
-   hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
+      hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
     roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
     enableLanControl: false,
     lanOnly: false,
-   lanDiscoveryTimeout: 4000,
-   lanDiscoveryTargets: [],            // Optional IPv4/CIDR targets for unicast LAN scan probes
-   lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
-   cloudDeviceListRefreshInterval: 0,  // 0 = fetch cloud device list every module refresh
-   cloudDeviceStateRefreshInterval: 0, // 0 = fetch cloud state every module refresh
-   compactCards: false,
-   maxCompactCards: 12,
+      lanDiscoveryTimeout: 4000,
+      lanDiscoveryTargets: [],            // Optional IPv4/CIDR targets for unicast LAN scan probes
+      lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
+      cloudDeviceListRefreshInterval: 0,  // 0 = fetch cloud device list every module refresh
+      cloudDeviceStateRefreshInterval: 0, // 0 = fetch cloud state every module refresh
+      compactCards: false,
+      maxCompactCards: 12,
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
