@@ -156,17 +156,17 @@ Add to your `config.js`:
     roomSummaryLightsOnly: false,      // Include all devices in room summary
     lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led"],
     hideAppliances: true,              // Hide appliance devices by keyword
-      hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
+    hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
     roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
     enableLanControl: false,
     lanOnly: false,
-      lanDiscoveryTimeout: 4000,
-      lanDiscoveryTargets: [],            // Optional IPv4/CIDR targets for unicast LAN scan probes
-      lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
-      cloudDeviceListRefreshInterval: 0,  // 0 = fetch cloud device list every module refresh
-      cloudDeviceStateRefreshInterval: 0, // 0 = fetch cloud state every module refresh
-      compactCards: false,
-      maxCompactCards: 12,
+    lanDiscoveryTimeout: 4000,
+    lanDiscoveryTargets: [],            // Optional IPv4/CIDR targets for unicast LAN scan probes
+    lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
+    cloudDeviceListRefreshInterval: 0,  // 0 = fetch cloud device list every module refresh
+    cloudDeviceStateRefreshInterval: 0, // 0 = fetch cloud state every module refresh
+    compactCards: false,
+    maxCompactCards: 12,
     fullWidthBottomBar: false,
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
@@ -260,7 +260,7 @@ Add to your `config.js`:
       apiKey: "YOUR_GOVEE_API_KEY",
       enableLanControl: true,
       lanOnly: false,
-      lanDiscoveryTimeout: 4000
+    lanDiscoveryTimeout: 4000
    }
 },
 ```
@@ -273,7 +273,7 @@ Add to your `config.js`:
    config: {
       enableLanControl: true,
       lanOnly: true,
-      lanDiscoveryTimeout: 5000
+    lanDiscoveryTimeout: 5000
    }
 },
 ```
@@ -290,8 +290,8 @@ Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you wan
       refreshInterval: 120000,               // Module refresh every 2 minutes
       enableLanControl: true,
       lanOnly: false,
-      cloudDeviceListRefreshInterval: 1800000, // Device list every 30 minutes
-      cloudDeviceStateRefreshInterval: 120000  // Device state every 2 minutes
+    cloudDeviceListRefreshInterval: 1800000, // Device list every 30 minutes
+    cloudDeviceStateRefreshInterval: 120000  // Device state every 2 minutes
    }
 },
 ```
@@ -305,17 +305,17 @@ With segmented refresh enabled, set `refreshInterval` to your fastest desired up
    position: "bottom_bar",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
-      compactCards: true,
-      maxCompactCards: 30,
+    compactCards: true,
+    maxCompactCards: 30,
       showRoomSummary: true,
       showLightsSummary: true,
       refreshInterval: 30000,                 // UI/LAN cadence every 30s
       enableLanControl: true,
       lanOnly: false,
-      lanDiscoveryTimeout: 5000,
-      lanDiscoveryTargets: ["10.0.10.0/24"],
-      cloudDeviceListRefreshInterval: 28800000, // Cloud list every 8h
-      cloudDeviceStateRefreshInterval: 600000   // Cloud state every 10m
+    lanDiscoveryTimeout: 5000,
+    lanDiscoveryTargets: ["10.0.10.0/24"],
+    cloudDeviceListRefreshInterval: 28800000, // Cloud list every 8h
+    cloudDeviceStateRefreshInterval: 600000   // Cloud state every 10m
    }
 },
 ```
@@ -331,9 +331,9 @@ This profile keeps local card responsiveness high while reducing cloud API calls
       apiKey: "YOUR_GOVEE_API_KEY",
       enableLanControl: true,
       lanOnly: false,
-      lanDiscoveryTimeout: 5000,
-      lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
-      lanStaticDevices: [
+    lanDiscoveryTimeout: 5000,
+    lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
+    lanStaticDevices: [
          {
             ip: "10.0.10.63",
             deviceId: "05:36:5C:E7:53:E8:F7:24",
@@ -364,8 +364,8 @@ For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
    position: "bottom_right",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
-      compactCards: true,
-      maxCompactCards: 12,
+    compactCards: true,
+    maxCompactCards: 12,
       showRoomSummary: true,
       showLightsSummary: true
    }
@@ -512,8 +512,8 @@ Backward compatibility note: if both `cloudDeviceListRefreshInterval` and `cloud
       refreshInterval: 600000,                // UI refresh every 10 minutes
       enableLanControl: true,
       lanOnly: false,
-      cloudDeviceListRefreshInterval: 3600000, // Cloud device list every 60 minutes
-      cloudDeviceStateRefreshInterval: 600000   // Cloud device state every 10 minutes
+    cloudDeviceListRefreshInterval: 3600000, // Cloud device list every 60 minutes
+    cloudDeviceStateRefreshInterval: 600000   // Cloud device state every 10 minutes
    }
 },
 ```
@@ -530,8 +530,8 @@ This keeps the display responsive without hammering the cloud API. With 25 devic
       refreshInterval: 300000,                // UI refresh every 5 minutes
       enableLanControl: true,
       lanOnly: false,
-      cloudDeviceListRefreshInterval: 1800000, // Cloud device list every 30 minutes
-      cloudDeviceStateRefreshInterval: 300000   // Cloud device state every 5 minutes
+    cloudDeviceListRefreshInterval: 1800000, // Cloud device list every 30 minutes
+    cloudDeviceStateRefreshInterval: 300000   // Cloud device state every 5 minutes
    }
 },
 ```
