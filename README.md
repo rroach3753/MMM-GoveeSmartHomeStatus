@@ -260,7 +260,7 @@ Add to your `config.js`:
       apiKey: "YOUR_GOVEE_API_KEY",
       enableLanControl: true,
       lanOnly: false,
-    lanDiscoveryTimeout: 4000
+      lanDiscoveryTimeout: 4000
    }
 },
 ```
@@ -273,7 +273,7 @@ Add to your `config.js`:
    config: {
       enableLanControl: true,
       lanOnly: true,
-    lanDiscoveryTimeout: 5000
+      lanDiscoveryTimeout: 5000
    }
 },
 ```
@@ -287,11 +287,11 @@ Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you wan
    position: "top_right",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
-      refreshInterval: 120000,               // Module refresh every 2 minutes
+      refreshInterval: 120000,                 // Module refresh every 2 minutes
       enableLanControl: true,
       lanOnly: false,
-    cloudDeviceListRefreshInterval: 1800000, // Device list every 30 minutes
-    cloudDeviceStateRefreshInterval: 120000  // Device state every 2 minutes
+      cloudDeviceListRefreshInterval: 1800000, // Device list every 30 minutes
+      cloudDeviceStateRefreshInterval: 120000  // Device state every 2 minutes
    }
 },
 ```
@@ -305,17 +305,17 @@ With segmented refresh enabled, set `refreshInterval` to your fastest desired up
    position: "bottom_bar",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
-    compactCards: true,
-    maxCompactCards: 30,
+      compactCards: true,
+      maxCompactCards: 30,
       showRoomSummary: true,
       showLightsSummary: true,
-      refreshInterval: 30000,                 // UI/LAN cadence every 30s
+      refreshInterval: 30000,                   // UI/LAN cadence every 30s
       enableLanControl: true,
       lanOnly: false,
-    lanDiscoveryTimeout: 5000,
-    lanDiscoveryTargets: ["10.0.10.0/24"],
-    cloudDeviceListRefreshInterval: 28800000, // Cloud list every 8h
-    cloudDeviceStateRefreshInterval: 600000   // Cloud state every 10m
+      lanDiscoveryTimeout: 5000,
+      lanDiscoveryTargets: ["10.0.10.0/24"],
+      cloudDeviceListRefreshInterval: 28800000, // Cloud list every 8h
+      cloudDeviceStateRefreshInterval: 600000   // Cloud state every 10m
    }
 },
 ```
@@ -331,9 +331,9 @@ This profile keeps local card responsiveness high while reducing cloud API calls
       apiKey: "YOUR_GOVEE_API_KEY",
       enableLanControl: true,
       lanOnly: false,
-    lanDiscoveryTimeout: 5000,
-    lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
-    lanStaticDevices: [
+      lanDiscoveryTimeout: 5000,
+      lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
+      lanStaticDevices: [
          {
             ip: "10.0.10.63",
             deviceId: "05:36:5C:E7:53:E8:F7:24",
@@ -364,8 +364,8 @@ For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
    position: "bottom_right",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
-    compactCards: true,
-    maxCompactCards: 12,
+      compactCards: true,
+      maxCompactCards: 12,
       showRoomSummary: true,
       showLightsSummary: true
    }
