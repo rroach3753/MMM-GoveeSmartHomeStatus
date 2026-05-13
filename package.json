@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "MMM-GoveeSmartHomeStatus.js",
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint"
   },
   "author": "Rick Roach",
   "license": "MIT",

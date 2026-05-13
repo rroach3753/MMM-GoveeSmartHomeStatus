@@ -1,4 +1,8 @@
-module.exports = [
+function defineConfig(config) {
+  return config;
+}
+
+module.exports = defineConfig([
   {
     ignores: [
       "node_modules/**",
@@ -19,4 +23,4 @@ module.exports = [
       "no-console": "off"
     }
   }
-];
+]);

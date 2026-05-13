@@ -342,7 +342,7 @@ module.exports = NodeHelper.create({
 
       try {
         socket.close();
-      } catch (_closeError) {
+      } catch {
         // noop
       }
 
@@ -360,7 +360,7 @@ module.exports = NodeHelper.create({
 
       try {
         parsed = JSON.parse(message.toString("utf8"));
-      } catch (_parseError) {
+      } catch {
         return;
       }
 
@@ -391,14 +391,14 @@ module.exports = NodeHelper.create({
       socket.setMulticastTTL(2);
       try {
         socket.addMembership(LAN_DISCOVERY_GROUP);
-      } catch (_membershipError) {
+      } catch {
         // Membership may fail on some interfaces but multicast send can still work.
       }
 
       // Multicast target used by Govee LAN implementations.
       try {
         socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, LAN_DISCOVERY_GROUP);
-      } catch (_sendError) {
+      } catch {
         // Ignore send failures here and let timeout-based fallback handle it.
       }
 
@@ -406,7 +406,7 @@ module.exports = NodeHelper.create({
       normalizedTargets.forEach(function (targetIp) {
         try {
           socket.send(payload, 0, payload.length, LAN_DISCOVERY_SEND_PORT, targetIp);
-        } catch (_sendError) {
+        } catch {
           // Ignore individual unicast send failures and continue probing.
         }
       });
@@ -505,7 +505,7 @@ module.exports = NodeHelper.create({
       if (sharedSocket) {
         try {
           sharedSocket.close();
-        } catch (_closeError) {
+        } catch {
           // noop
         }
       }
@@ -523,7 +523,7 @@ module.exports = NodeHelper.create({
     // Create a single shared listener socket for all device probes
     sharedSocket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
-    sharedSocket.on("error", function (_error) {
+    sharedSocket.on("error", function () {
       finish();
     });
 
@@ -535,7 +535,7 @@ module.exports = NodeHelper.create({
 
       try {
         parsed = JSON.parse(message.toString("utf8"));
-      } catch (_parseError) {
+      } catch {
         return;
       }
 
@@ -602,7 +602,7 @@ module.exports = NodeHelper.create({
       devices.forEach(function (device) {
         try {
           sharedSocket.send(requestPayload, 0, requestPayload.length, LAN_DEVICE_CONTROL_PORT, device.localIp);
-        } catch (_sendError) {
+        } catch {
           // Ignore individual send failures and let timeout handling fall back.
         }
       });
@@ -839,7 +839,6 @@ module.exports = NodeHelper.create({
 
   mergeLanIntoCloud: function (cloudDevices, lanDevices) {
     var lanById = {};
-    var merged = [];
 
     lanDevices.forEach(function (lanDevice) {
       if (lanDevice.deviceId) {
@@ -847,7 +846,7 @@ module.exports = NodeHelper.create({
       }
     });
 
-    merged = cloudDevices.map(function (cloudDevice) {
+    return cloudDevices.map(function (cloudDevice) {
       var key = String(cloudDevice.deviceId || "").toLowerCase();
       var lanMatch = lanById[key];
 
@@ -867,8 +866,6 @@ module.exports = NodeHelper.create({
         source: "cloud+lan"
       });
     });
-
-    return merged;
   },
 
   processGoveeResponse: function (data) {
