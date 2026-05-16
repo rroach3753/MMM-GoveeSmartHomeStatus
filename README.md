@@ -14,6 +14,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Color-coded online/offline status indicators
 - Source badges for connectivity path: `CLOUD`, `LAN`, and `LAN+`
 - Real-time device list updates
+- Refreshes update in place after the first render without flashing the module
 - Configurable refresh interval
 - Full-width bottom bar layout option for compact device display
 - **Compact multi-column card grid layout** with 3-4 cards per row (ideal for side panels)
