@@ -34,6 +34,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   start: function () {
     this.instanceId = this.identifier || this.name;
+    this.hasRenderedData = false;
     this.dataState = {
       devices: [],
       fetchedAt: null,
@@ -105,7 +106,8 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         clearTimeout(this.configRetryTimer);
       }
 
-      this.updateDom(300);
+      this.updateDom(this.hasRenderedData ? 0 : 300);
+      this.hasRenderedData = true;
 
       if (this.config.refreshInterval > 0) {
         if (this.refreshTimer) {
@@ -142,7 +144,8 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         }
       }, retryDelay);
 
-      this.updateDom(300);
+      this.updateDom(this.hasRenderedData ? 0 : 300);
+      this.hasRenderedData = true;
     }
   },
 
