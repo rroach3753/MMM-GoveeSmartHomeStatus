@@ -33,6 +33,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Outbound HTTPS access to `openapi.api.govee.com`
 
 For LAN Control mode:
+
 - Enable LAN Control for each device in the Govee app
 - Keep MagicMirror and Govee devices on the same local network/VLAN, or use cross-subnet targeting options below
 - Allow local UDP multicast/broadcast discovery traffic
@@ -44,21 +45,25 @@ For LAN Control mode:
 ### Install (Standard / Git)
 
 1. Navigate to your MagicMirror modules directory:
+
    ```bash
    cd ~/MagicMirror/modules
    ```
 
 2. Clone the repository from [GitHub](https://github.com/rroach3753/MMM-GoveeSmartHomeStatus):
+
    ```bash
    git clone https://github.com/rroach3753/MMM-GoveeSmartHomeStatus.git
    ```
 
 3. Navigate into the module directory:
+
    ```bash
    cd MMM-GoveeSmartHomeStatus
    ```
 
 4. Install dependencies:
+
    ```bash
    npm install
    ```
@@ -66,11 +71,13 @@ For LAN Control mode:
 ### Install (MMPM)
 
 1. Install using MMPM:
+
    ```bash
    mmpm install MMM-GoveeSmartHomeStatus
    ```
 
 2. If your setup requires dependencies to be installed manually, run:
+
    ```bash
    cd ~/MagicMirror/modules/MMM-GoveeSmartHomeStatus
    npm install
@@ -81,16 +88,19 @@ For LAN Control mode:
 ### Update (Standard / Git)
 
 1. Navigate to the module directory:
+
    ```bash
    cd ~/MagicMirror/modules/MMM-GoveeSmartHomeStatus
    ```
 
 2. Pull the latest changes:
+
    ```bash
    git pull
    ```
 
 3. Refresh dependencies (recommended after updates):
+
    ```bash
    npm install
    ```
@@ -110,10 +120,12 @@ If you configure `enableLanControl: true` and `lanOnly: true`, you can run LAN d
 LAN-only mode is currently discovery-focused. Some devices may not report cloud-level telemetry fields (for example, power/temperature/humidity) unless cloud mode is also enabled.
 
 Fallback behavior:
+
 - In hybrid mode (`enableLanControl: true`, `lanOnly: false`), if LAN `devStatus` is unavailable for a device, the module keeps cloud state for that device.
 - In LAN-only mode (`lanOnly: true`), there is no cloud fallback.
 
 ### How to get a key
+
 1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
 2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
 3. After approval, create/generate your API key from your Govee developer settings.
@@ -126,6 +138,7 @@ config: {
 ```
 
 ### Alternative: get API key in the Govee mobile app
+
 If you prefer, you can request/generate your API key directly in the Govee app:
 
 1. Open the Govee Home app and sign in.
@@ -181,7 +194,7 @@ Add to your `config.js`:
 ## Configuration Options
 
 | Option | Type | Description | Default |
-|--------|------|-------------|---------|
+| -------- | ------ | ------------- | --------- |
 | `apiKey` | String | Your Govee API key (required) | `""` |
 | `title` | String | Module title | `"Govee Devices"` |
 | `refreshInterval` | Number | Refresh interval in milliseconds (0 to disable) | `480000` |
@@ -214,6 +227,7 @@ Add to your `config.js`:
 ## Usage Examples
 
 ### Standard Layout (Top Right Position)
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -226,6 +240,7 @@ Add to your `config.js`:
 ```
 
 ### Full-Width Bottom Bar Layout
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -240,6 +255,7 @@ Add to your `config.js`:
 ```
 
 ### Disable Summaries and Show Appliances
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -254,6 +270,7 @@ Add to your `config.js`:
 ```
 
 ### Hybrid Cloud + LAN Discovery (Recommended)
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -268,6 +285,7 @@ Add to your `config.js`:
 ```
 
 ### LAN-Only Discovery (No API Key)
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -283,6 +301,7 @@ Add to your `config.js`:
 Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you want LAN reachability plus richer cloud state data.
 
 ### Hybrid Mode with Segmented Cloud Refresh
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -301,6 +320,7 @@ Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you wan
 With segmented refresh enabled, set `refreshInterval` to your fastest desired update cadence (usually the cloud state interval).
 
 ### Recommended: Fast LAN + Conservative Cloud
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -325,6 +345,7 @@ With segmented refresh enabled, set `refreshInterval` to your fastest desired up
 This profile keeps local card responsiveness high while reducing cloud API calls.
 
 ### Cross-Subnet / VLAN Discovery
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -360,6 +381,7 @@ For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
 `lanStaticDevices` adds known devices even when cross-subnet UDP replies are blocked.
 
 ### Compact Cards Layout with Room Summaries
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -381,6 +403,7 @@ For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
 ![Bottom bar layout preview](images/in_bottom_bar.png)
 
 In this layout:
+
 - Summaries are centered horizontally above device cards
 - Lights and room summaries render in a horizontal row
 - Device cards are compact and fit into a maximum of 2 rows
@@ -390,6 +413,7 @@ In this layout:
 ![Outside bottom_bar layout preview](images/outside_bottom_bar.png)
 
 This layout displays:
+
 - **Lights Summary** — Total count of lights on/off (e.g., "7 on / 16 off")
 - **Room Summary** — 2-column grid showing per-room device counts with color-coding:
   - Green border/text for rooms with at least one device ON
@@ -397,7 +421,7 @@ This layout displays:
 - **Device Grid** — Compact 3-column card layout showing all devices with name and power state (ON/OFF)
   - Green border indicates powered ON devices
   - Gray border indicates powered OFF devices
-   - Source badge shows `LAN+` (cloud+LAN merged), `LAN` (LAN-only), or `CLOUD` (cloud-only)
+  - Source badge shows `LAN+` (cloud+LAN merged), `LAN` (LAN-only), or `CLOUD` (cloud-only)
   - Perfect for side panels (bottom_right, top_right, etc.)
 
 ## Customizing Light Detection
@@ -405,6 +429,7 @@ This layout displays:
 The module classifies a device as a light when its name, type, or model contains a keyword from `lightDetectionKeywords`. This is used for the lights summary and for detecting light devices in room summaries.
 
 ### Example: Add custom light keywords
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -417,6 +442,7 @@ The module classifies a device as a light when its name, type, or model contains
 ```
 
 ### Example: Strict light matching (only certain types)
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -435,6 +461,7 @@ The module classifies a device as a light when its name, type, or model contains
 This error indicates your system cannot reach the Govee API server. Try these steps:
 
 1. **Check Network Connectivity**
+
    ```bash
    ping -c 4 openapi.api.govee.com
    nslookup openapi.api.govee.com
@@ -446,12 +473,15 @@ This error indicates your system cannot reach the Govee API server. Try these st
    - Try disabling VPN or proxy if you're using one
 
 3. **Verify DNS Configuration**
+
    ```bash
    cat /etc/resolv.conf
    ```
+
    Ensure you have valid DNS servers configured (e.g., 8.8.8.8, 1.1.1.1)
 
 4. **Test API Connectivity**
+
    ```bash
    curl -H "Govee-API-Key: YOUR_API_KEY" https://openapi.api.govee.com/router/api/v1/user/devices
    ```
@@ -496,7 +526,7 @@ For example, with 25 devices, a 30 minute device-list interval, and a 2 minute d
 That is a high-volume configuration and will exceed the 10,000 request limit.
 
 | Mode | Example intervals | Rough requests/day | Notes |
-|------|-------------------|--------------------|-------|
+| ------ | ------------------- | -------------------- | ------- |
 | Legacy | `refreshInterval = 8 min` | `25 devices -> 4,680` | Current behavior when both segmented intervals are `0` |
 | Segmented, medium-use | `list = 30 min`, `state = 5 min` | `25 devices -> 7,224` | Balanced option that stays under the default limit |
 | Segmented, fast | `list = 30 min`, `state = 2 min` | `25 devices -> 18,024` | Too high for the default Govee limit |
@@ -505,6 +535,7 @@ That is a high-volume configuration and will exceed the 10,000 request limit.
 Backward compatibility note: if both `cloudDeviceListRefreshInterval` and `cloudDeviceStateRefreshInterval` are `0`, the module keeps the legacy behavior and refreshes both list and state on every module refresh.
 
 ### Safe Low-Use Segmented Refresh
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
@@ -523,6 +554,7 @@ Backward compatibility note: if both `cloudDeviceListRefreshInterval` and `cloud
 This keeps the display responsive without hammering the cloud API. With 25 devices, it stays around `3,624` cloud requests/day.
 
 ### Medium-Use Segmented Refresh
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
