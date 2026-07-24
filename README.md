@@ -12,7 +12,6 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Display list of Govee smart devices with live online and power state
 - Display live power draw (watts/kW) when the device reports it
 - Display temperature and humidity when the device reports them
-- Optional account-credentials data source mode (experimental)
 - Color-coded online/offline status indicators
 - Source badges for connectivity path: `CLOUD`, `LAN`, and `LAN+`
 - Real-time device list updates
@@ -41,12 +40,6 @@ For LAN Control mode:
 - Allow local UDP multicast/broadcast discovery traffic
 
 **Note:** This module now calls both Govee APIs: the device list endpoint and the per-device state endpoint. With large device counts, lower refresh intervals will consume your daily API quota faster.
-
-Experimental account mode note:
-
-- You can optionally use app-account credentials instead of Open API key by setting `dataSource: "account"`.
-- This depends on private app endpoints and may break if Govee changes request requirements.
-- Some accounts may require `account2FACode` during login.
 
 ## Installation
 
@@ -168,10 +161,6 @@ Add to your `config.js`:
   position: "top_right",
   config: {
     apiKey: "YOUR_GOVEE_API_KEY",
-   dataSource: "openApi",            // "openApi" (default) or "account" (experimental)
-   accountEmail: "",                 // Required when dataSource is "account"
-   accountPassword: "",              // Required when dataSource is "account"
-   account2FACode: "",               // Optional one-time 2FA code for account mode
     title: "Govee Devices",
     refreshInterval: 480000,           // Refresh every 8 minutes (ms)
     showOnlineOnly: false,             // Show all devices or only online
@@ -209,10 +198,6 @@ Add to your `config.js`:
 | Option | Type | Description | Default |
 | -------- | ------ | ------------- | --------- |
 | `apiKey` | String | Your Govee API key (required) | `""` |
-| `dataSource` | String | Data provider mode: `openApi` or `account` (experimental) | `"openApi"` |
-| `accountEmail` | String | Govee account email for `account` mode | `""` |
-| `accountPassword` | String | Govee account password for `account` mode | `""` |
-| `account2FACode` | String | Optional 2FA code for account login when required | `""` |
 | `title` | String | Module title | `"Govee Devices"` |
 | `refreshInterval` | Number | Refresh interval in milliseconds (0 to disable) | `480000` |
 | `showOnlineOnly` | Boolean | Show only devices currently reporting online | `false` |
@@ -301,25 +286,6 @@ Add to your `config.js`:
    }
 },
 ```
-
-### Experimental Account-Credentials Mode
-
-```javascript
-{
-   module: "MMM-GoveeSmartHomeStatus",
-   position: "top_right",
-   config: {
-      dataSource: "account",
-      accountEmail: "YOUR_GOVEE_EMAIL",
-      accountPassword: "YOUR_GOVEE_PASSWORD",
-      account2FACode: "", // set when prompted by account login flow
-      showPower: true,
-      showPowerDraw: true
-   }
-},
-```
-
-This mode is best treated as a fallback option because private app endpoints can change without notice.
 
 ### LAN-Only Discovery (No API Key)
 

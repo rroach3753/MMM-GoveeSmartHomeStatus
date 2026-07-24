@@ -4,10 +4,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   defaults: {
     title: "Govee Devices",
     apiKey: "",
-    dataSource: "openApi",
-    accountEmail: "",
-    accountPassword: "",
-    account2FACode: "",
     refreshInterval: 480000,
     showOnlineOnly: false,
     showPower: true,
@@ -61,10 +57,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     this.sendSocketNotification("GOVEE_DEVICES_REQUEST", {
       instanceId: this.instanceId,
       apiKey: this.config.apiKey,
-      dataSource: this.config.dataSource,
-      accountEmail: this.config.accountEmail,
-      accountPassword: this.config.accountPassword,
-      account2FACode: this.config.account2FACode,
       enableLanControl: this.config.enableLanControl,
       lanOnly: this.config.lanOnly,
       lanDiscoveryTimeout: this.config.lanDiscoveryTimeout,
@@ -192,7 +184,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }
 
     // No API key
-    if (this.config.dataSource !== "account" && !this.config.apiKey && !(this.config.enableLanControl && this.config.lanOnly)) {
+    if (!this.config.apiKey && !(this.config.enableLanControl && this.config.lanOnly)) {
       var noKeyDiv = document.createElement("div");
       noKeyDiv.className = "message";
       noKeyDiv.textContent = this.config.noApiKeyMessage;
