@@ -10,7 +10,6 @@ A MagicMirror module for displaying Govee smart home device status and informati
 ## Features
 
 - Display list of Govee smart devices with live online and power state
-- Display live power draw (watts/kW) when the device reports it
 - Display temperature and humidity when the device reports them
 - Color-coded online/offline status indicators
 - Source badges for connectivity path: `CLOUD`, `LAN`, and `LAN+`
@@ -118,7 +117,7 @@ This module requires a Govee Open API key. Without it, device data cannot be loa
 
 If you configure `enableLanControl: true` and `lanOnly: true`, you can run LAN discovery mode without an API key.
 
-LAN-only mode is currently discovery-focused. Some devices may not report cloud-level telemetry fields (for example, power draw/temperature/humidity) unless cloud mode is also enabled.
+LAN-only mode is currently discovery-focused. Some devices may not report cloud-level telemetry fields (for example, power/temperature/humidity) unless cloud mode is also enabled.
 
 Fallback behavior:
 
@@ -165,7 +164,6 @@ Add to your `config.js`:
     refreshInterval: 480000,           // Refresh every 8 minutes (ms)
     showOnlineOnly: false,             // Show all devices or only online
     showPower: true,                   // Display live power state when available
-   showPowerDraw: true,               // Display live power draw when available
     showTemperature: true,             // Display live temperature when available
     showHumidity: true,                // Display live humidity when available
     showLightsSummary: true,           // Show lights count summary
@@ -202,7 +200,6 @@ Add to your `config.js`:
 | `refreshInterval` | Number | Refresh interval in milliseconds (0 to disable) | `480000` |
 | `showOnlineOnly` | Boolean | Show only devices currently reporting online | `false` |
 | `showPower` | Boolean | Display live power state when available | `true` |
-| `showPowerDraw` | Boolean | Display live power draw (watts/kW) when available | `true` |
 | `showTemperature` | Boolean | Display live temperature when available | `true` |
 | `showHumidity` | Boolean | Display live humidity when available | `true` |
 | `showLightsSummary` | Boolean | Show total lights count summary | `true` |

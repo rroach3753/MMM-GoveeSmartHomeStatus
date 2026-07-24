@@ -7,7 +7,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     refreshInterval: 480000,
     showOnlineOnly: false,
     showPower: true,
-    showPowerDraw: true,
     showTemperature: true,
     showHumidity: true,
     showLightsSummary: true,
@@ -271,17 +270,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
           statusDiv.appendChild(powerSpan);
         }
 
-        if (this.config.showPowerDraw) {
-          var powerDrawLabel = this.formatPowerDraw(device.powerDrawWatts);
-          if (powerDrawLabel) {
-            var powerDrawSpan = document.createElement("span");
-            powerDrawSpan.className = "device-detail";
-            powerDrawSpan.textContent = "Power: " + powerDrawLabel;
-            statusDiv.appendChild(document.createElement("br"));
-            statusDiv.appendChild(powerDrawSpan);
-          }
-        }
-
         if (this.config.showTemperature && typeof device.temperature !== "undefined") {
           var temperatureSpan = document.createElement("span");
           temperatureSpan.className = "device-detail";
@@ -362,16 +350,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         card.appendChild(powerDiv);
       }
 
-      if (this.config.showPowerDraw) {
-        var compactPowerDraw = this.formatPowerDraw(device.powerDrawWatts);
-        if (compactPowerDraw) {
-          var powerDrawDiv = document.createElement("div");
-          powerDrawDiv.className = "compact-card-power-draw";
-          powerDrawDiv.textContent = compactPowerDraw;
-          card.appendChild(powerDrawDiv);
-        }
-      }
-
       wrapper.appendChild(card);
     }.bind(this));
 
@@ -420,24 +398,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }
 
     return "";
-  },
-
-  formatPowerDraw: function (value) {
-    var watts = Number(value);
-
-    if (!Number.isFinite(watts) || watts < 0) {
-      return "";
-    }
-
-    if (watts >= 1000) {
-      return (watts / 1000).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1") + " kW";
-    }
-
-    if (watts >= 100) {
-      return Math.round(watts) + " W";
-    }
-
-    return watts.toFixed(1).replace(/\.0$/, "") + " W";
   },
 
   getFilteredDevices: function (devices) {
