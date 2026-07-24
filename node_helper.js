@@ -1,6 +1,7 @@
 const NodeHelper = require("node_helper");
 const https = require("node:https");
 const dgram = require("node:dgram");
+const crypto = require("node:crypto");
 
 const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
 const LAN_DISCOVERY_GROUP = "239.255.255.250";
@@ -17,6 +18,9 @@ const POWER_DRAW_CAPABILITY_INSTANCES = [
   "powerConsumption",
   "electricity"
 ];
+const APP_ACCOUNT_VERSION = "7.4.10";
+const APP_ACCOUNT_USER_AGENT = "GoveeHome/7.4.10 (com.ihoment.GoVeeSensor; build:8; iOS 26.5.0) Alamofire/5.11.0";
+const ACCOUNT_TOKEN_REFRESH_MS = 4 * 60 * 60 * 1000;
 
 module.exports = NodeHelper.create({
   start: function () {
@@ -26,6 +30,12 @@ module.exports = NodeHelper.create({
     this.cachedEnrichedCloudDevices = [];
     this.lastCloudListFetchAt = 0;
     this.lastCloudStateFetchAt = 0;
+    this.accountCacheIdentity = "";
+    this.accountClientId = "";
+    this.accountToken = "";
+    this.accountTokenFetchedAt = 0;
+    this.cachedAccountDevices = [];
+    this.lastAccountFetchAt = 0;
   },
 
   sendDevicesData: function (devices, instanceId) {
@@ -52,6 +62,10 @@ module.exports = NodeHelper.create({
     var self = this;
     var instanceId = requestOptions.instanceId || null;
     var apiKey = requestOptions.apiKey;
+    var dataSource = requestOptions.dataSource === "account" ? "account" : "openApi";
+    var accountEmail = String(requestOptions.accountEmail || "").trim();
+    var accountPassword = String(requestOptions.accountPassword || "").trim();
+    var account2FACode = String(requestOptions.account2FACode || "").trim();
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
     var lanDiscoveryTimeout = Number(requestOptions.lanDiscoveryTimeout) || 4000;
@@ -60,8 +74,24 @@ module.exports = NodeHelper.create({
     var cloudDeviceListRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceListRefreshInterval);
     var cloudDeviceStateRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceStateRefreshInterval);
 
-    function sendCloudData() {
-      self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
+    function fetchPrimaryData(callback) {
+      if (dataSource === "account") {
+        self.fetchAccountDevicesSegmented(
+          accountEmail,
+          accountPassword,
+          account2FACode,
+          cloudDeviceListRefreshInterval,
+          cloudDeviceStateRefreshInterval,
+          callback
+        );
+        return;
+      }
+
+      self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, callback);
+    }
+
+    function sendPrimaryData() {
+      fetchPrimaryData(function (error, devices) {
         if (error) {
           self.sendDevicesError(error.message, instanceId);
           return;
@@ -88,24 +118,29 @@ module.exports = NodeHelper.create({
             return;
           }
 
-          if (!apiKey) {
+          if (dataSource === "account" && (!accountEmail || !accountPassword)) {
+            self.sendDevicesError("accountEmail and accountPassword are required when dataSource is account", instanceId);
+            return;
+          }
+
+          if (dataSource === "openApi" && !apiKey) {
             self.sendDevicesError("API key is required unless lanOnly is enabled", instanceId);
             return;
           }
 
-          self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (cloudError, cloudDevices) {
-            if (cloudError) {
-              self.sendDevicesError(cloudError.message, instanceId);
+          fetchPrimaryData(function (primaryError, primaryDevices) {
+            if (primaryError) {
+              self.sendDevicesError(primaryError.message, instanceId);
               return;
             }
 
             // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
             if (lanError && !lanDevicesWithStatus.length) {
-              self.sendDevicesData(cloudDevices, instanceId);
+              self.sendDevicesData(primaryDevices, instanceId);
               return;
             }
 
-            self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus), instanceId);
+            self.sendDevicesData(self.mergeLanIntoCloud(primaryDevices, lanDevicesWithStatus), instanceId);
           });
         });
       });
@@ -113,12 +148,17 @@ module.exports = NodeHelper.create({
       return;
     }
 
-    if (!apiKey) {
+    if (dataSource === "account") {
+      if (!accountEmail || !accountPassword) {
+        self.sendDevicesError("accountEmail and accountPassword are required when dataSource is account", instanceId);
+        return;
+      }
+    } else if (!apiKey) {
       self.sendDevicesError("API key is required", instanceId);
       return;
     }
 
-    sendCloudData();
+    sendPrimaryData();
   },
 
   normalizeRefreshInterval: function (value) {
@@ -145,6 +185,182 @@ module.exports = NodeHelper.create({
     if (this.cloudCacheApiKey !== currentApiKey) {
       this.resetCloudCache(currentApiKey);
     }
+  },
+
+  resetAccountCache: function (identity) {
+    this.accountCacheIdentity = String(identity || "");
+    this.accountClientId = this.buildAccountClientId(this.accountCacheIdentity);
+    this.accountToken = "";
+    this.accountTokenFetchedAt = 0;
+    this.cachedAccountDevices = [];
+    this.lastAccountFetchAt = 0;
+  },
+
+  ensureAccountCacheForCredentials: function (email, password) {
+    var identity = String(email || "") + "::" + String(password || "");
+
+    if (this.accountCacheIdentity !== identity) {
+      this.resetAccountCache(identity);
+    }
+  },
+
+  buildAccountClientId: function (identity) {
+    var hash = crypto.createHash("sha1").update(String(identity || "")).digest("hex");
+    return "hb" + hash.slice(0, 30);
+  },
+
+  buildAccountHeaders: function (token) {
+    var headers = {
+      "appVersion": APP_ACCOUNT_VERSION,
+      "clientId": this.accountClientId,
+      "clientType": 1,
+      "iotVersion": 0,
+      "timestamp": Date.now(),
+      "User-Agent": APP_ACCOUNT_USER_AGENT,
+      "Content-Type": "application/json"
+    };
+
+    if (token) {
+      headers.Authorization = "Bearer " + token;
+    }
+
+    return headers;
+  },
+
+  fetchAccountDevicesSegmented: function (email, password, code, listIntervalMs, stateIntervalMs, callback) {
+    var self = this;
+    var now = Date.now();
+    var listInterval = this.normalizeRefreshInterval(listIntervalMs);
+    var stateInterval = this.normalizeRefreshInterval(stateIntervalMs);
+    var refreshInterval = Math.max(listInterval, stateInterval);
+    var hasCached = Array.isArray(this.cachedAccountDevices) && this.cachedAccountDevices.length > 0;
+    var tokenFresh = this.accountToken && (now - this.accountTokenFetchedAt) < ACCOUNT_TOKEN_REFRESH_MS;
+    var shouldRefetch = !hasCached || refreshInterval === 0 || !this.lastAccountFetchAt || (now - this.lastAccountFetchAt >= refreshInterval);
+
+    this.ensureAccountCacheForCredentials(email, password);
+
+    function fetchListAndFinish() {
+      self.fetchAccountDeviceList(function (listError, accountDevices) {
+        if (listError) {
+          if (String(listError.message || "").indexOf("Account token expired") !== -1) {
+            loginAndContinue();
+            return;
+          }
+
+          callback(listError);
+          return;
+        }
+
+        self.cachedAccountDevices = Array.isArray(accountDevices) ? accountDevices : [];
+        self.lastAccountFetchAt = Date.now();
+        callback(null, self.cachedAccountDevices);
+      });
+    }
+
+    function loginAndContinue() {
+      self.loginAccount(email, password, code, function (loginError) {
+        if (loginError) {
+          callback(loginError);
+          return;
+        }
+
+        fetchListAndFinish();
+      });
+    }
+
+    if (!tokenFresh) {
+      loginAndContinue();
+      return;
+    }
+
+    if (!shouldRefetch) {
+      callback(null, this.cachedAccountDevices);
+      return;
+    }
+
+    fetchListAndFinish();
+  },
+
+  loginAccount: function (email, password, code, callback) {
+    var self = this;
+    var loginPayload = {
+      email: email,
+      password: password,
+      client: this.accountClientId
+    };
+
+    if (code) {
+      loginPayload.code = code;
+    }
+
+    this.requestJson({
+      hostname: "app2.govee.com",
+      port: 443,
+      path: "/account/rest/account/v2/login",
+      method: "POST",
+      headers: this.buildAccountHeaders(),
+      body: loginPayload,
+      timeout: 30000,
+      maxBytes: 2 * 1024 * 1024
+    }, function (error, response) {
+      if (error) {
+        callback(error);
+        return;
+      }
+
+      var body = response.body || {};
+      var token = body && body.client ? body.client.token : "";
+
+      if (body.status === 454 && !code) {
+        callback(new Error("Govee account requires 2FA code. Set account2FACode in module config and retry."));
+        return;
+      }
+
+      if (!token) {
+        callback(new Error((body.message || body.msg || "Account login failed") + " (status " + (body.status || response.statusCode) + ")"));
+        return;
+      }
+
+      self.accountToken = String(token);
+      self.accountTokenFetchedAt = Date.now();
+      callback(null);
+    });
+  },
+
+  fetchAccountDeviceList: function (callback, hasRetriedAfterLogin) {
+    var self = this;
+
+    this.requestJson({
+      hostname: "app2.govee.com",
+      port: 443,
+      path: "/bff-app/v1/device/list",
+      method: "GET",
+      headers: this.buildAccountHeaders(this.accountToken),
+      timeout: 30000,
+      maxBytes: 2 * 1024 * 1024
+    }, function (error, response) {
+      if (error) {
+        callback(error);
+        return;
+      }
+
+      var body = response.body || {};
+      var devices = body && body.data ? body.data.devices : null;
+
+      if (!Array.isArray(devices)) {
+        if (!hasRetriedAfterLogin && (response.statusCode === 401 || body.status === 401)) {
+          self.accountToken = "";
+          self.accountTokenFetchedAt = 0;
+          callback(new Error("Account token expired. Retry after refresh."));
+          return;
+        }
+
+        callback(new Error("Unexpected account device-list response"));
+        return;
+      }
+
+      callback(null, self.processAccountDeviceResponse(devices));
+    });
   },
 
   fetchCloudDevicesSegmented: function (apiKey, listIntervalMs, stateIntervalMs, callback) {
@@ -906,6 +1122,144 @@ module.exports = NodeHelper.create({
     });
   },
 
+  processAccountDeviceResponse: function (devices) {
+    var self = this;
+
+    return (Array.isArray(devices) ? devices : []).map(function (device) {
+      return self.normalizeAccountDevice(device);
+    });
+  },
+
+  normalizeAccountDevice: function (device) {
+    var entry = device && typeof device === "object" ? device : {};
+    var entries = [];
+
+    this.collectLeafEntries(entry, "", 0, 7, entries);
+
+    return {
+      deviceId: String(
+        this.findFirstLeafValue(entries, ["deviceId", "device", "iotId", "skuDeviceId"]) ||
+        entry.device ||
+        entry.deviceId ||
+        ""
+      ),
+      deviceName: String(
+        this.findFirstLeafValue(entries, ["deviceName", "name", "device.deviceName", "device.name"]) ||
+        entry.deviceName ||
+        entry.name ||
+        "Unknown Device"
+      ),
+      deviceType: String(this.findFirstLeafValue(entries, ["deviceType", "type"]) || entry.deviceType || entry.type || "Account"),
+      model: String(this.findFirstLeafValue(entries, ["sku", "model"]) || entry.sku || entry.model || "Unknown"),
+      roomName: String(this.findFirstLeafValue(entries, ["roomName", "room"]) || entry.roomName || entry.room || ""),
+      online: this.normalizeBoolean(
+        this.findFirstLeafValue(entries, ["online", "onLine", "isOnline"]),
+        true
+      ),
+      powerState: this.normalizeBoolean(
+        this.findFirstLeafValue(entries, ["powerSwitch", "onOff", "powerState", "switch"]) || this.findPowerStateByPath(entries),
+        undefined
+      ),
+      powerDrawWatts: this.findPowerDrawByPath(entries),
+      temperature: this.getNumericFromLeaf(entries, ["sensorTemperature", "temperature"]),
+      humidity: this.getNumericFromLeaf(entries, ["sensorHumidity", "humidity"]),
+      brightness: this.getNumericFromLeaf(entries, ["brightness"]),
+      colorTemperature: this.getNumericFromLeaf(entries, ["colorTemperatureK", "colorTemperature"]),
+      color: this.findFirstLeafValue(entries, ["colorRgb", "color"]),
+      source: "account"
+    };
+  },
+
+  collectLeafEntries: function (value, path, depth, maxDepth, collector) {
+    var self = this;
+
+    if (depth > maxDepth || value === null || typeof value === "undefined") {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(function (item, index) {
+        self.collectLeafEntries(item, path + "[" + index + "]", depth + 1, maxDepth, collector);
+      });
+      return;
+    }
+
+    if (typeof value === "object") {
+      Object.keys(value).forEach(function (key) {
+        var nextPath = path ? path + "." + key : key;
+        self.collectLeafEntries(value[key], nextPath, depth + 1, maxDepth, collector);
+      });
+      return;
+    }
+
+    collector.push({ path: path.toLowerCase(), value: value });
+  },
+
+  findFirstLeafValue: function (entries, keyHints) {
+    var hintIndex;
+    var match;
+
+    for (hintIndex = 0; hintIndex < keyHints.length; hintIndex += 1) {
+      match = entries.find(function (entry) {
+        return entry.path.endsWith(String(keyHints[hintIndex]).toLowerCase());
+      });
+
+      if (match) {
+        return match.value;
+      }
+    }
+
+    return undefined;
+  },
+
+  findPowerStateByPath: function (entries) {
+    var candidates = entries.filter(function (entry) {
+      return /powerswitch|onoff|powerstate|\.switch$/.test(entry.path);
+    });
+
+    if (!candidates.length) {
+      return undefined;
+    }
+
+    return candidates[0].value;
+  },
+
+  findPowerDrawByPath: function (entries) {
+    var self = this;
+    var candidates;
+    var index;
+    var parsed;
+
+    candidates = entries.filter(function (entry) {
+      if (/powerswitch|powerstate|onoff/.test(entry.path)) {
+        return false;
+      }
+
+      return /electricpower|currentpower|powerw|powerconsumption|watt|watts|electricity|\.power$/.test(entry.path);
+    });
+
+    for (index = 0; index < candidates.length; index += 1) {
+      parsed = self.parsePowerDrawValue(candidates[index].value);
+      if (typeof parsed !== "undefined") {
+        return parsed;
+      }
+    }
+
+    return undefined;
+  },
+
+  getNumericFromLeaf: function (entries, keyHints) {
+    var value = this.findFirstLeafValue(entries, keyHints);
+    var numericValue;
+
+    if (typeof value === "undefined" || value === null || value === "") {
+      return undefined;
+    }
+
+    numericValue = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+  },
+
   processGoveeResponse: function (data) {
     var devices = [];
 
@@ -1206,6 +1560,85 @@ module.exports = NodeHelper.create({
     }
 
     return fallbackValue;
+  },
+
+  requestJson: function (options, callback) {
+    var isSettled = false;
+    var requestBody = options && options.body ? JSON.stringify(options.body) : "";
+    var requestHeaders = Object.assign({}, options.headers || {});
+    var requestOptions;
+    var req;
+
+    if (requestBody) {
+      requestHeaders["Content-Length"] = Buffer.byteLength(requestBody);
+    }
+
+    requestOptions = {
+      hostname: options.hostname,
+      port: options.port || 443,
+      path: options.path,
+      method: options.method || "GET",
+      headers: requestHeaders,
+      timeout: options.timeout || 15000
+    };
+
+    function safeCallback(error, payload) {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      callback(error, payload);
+    }
+
+    req = https.request(requestOptions, function (res) {
+      var responseBody = "";
+      var exceededLimit = false;
+      var maxBytes = Number(options.maxBytes) || 1048576;
+
+      res.on("data", function (chunk) {
+        responseBody += chunk;
+        if (responseBody.length > maxBytes) {
+          exceededLimit = true;
+          req.destroy(new Error("Response body exceeded limit"));
+        }
+      });
+
+      res.on("end", function () {
+        var parsed;
+
+        if (exceededLimit) {
+          return;
+        }
+
+        try {
+          parsed = responseBody ? JSON.parse(responseBody) : {};
+        } catch (error) {
+          safeCallback(new Error("Error parsing response: " + error.message));
+          return;
+        }
+
+        safeCallback(null, {
+          statusCode: res.statusCode,
+          statusMessage: res.statusMessage,
+          body: parsed
+        });
+      });
+    });
+
+    req.on("timeout", function () {
+      req.destroy(new Error("Request timeout"));
+    });
+
+    req.on("error", function (error) {
+      safeCallback(error);
+    });
+
+    if (requestBody) {
+      req.write(requestBody);
+    }
+
+    req.end();
   },
 
   generateRequestId: function () {
