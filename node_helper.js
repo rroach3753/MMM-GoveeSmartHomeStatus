@@ -8,6 +8,15 @@ const LAN_DISCOVERY_SEND_PORT = 4001;
 const LAN_DISCOVERY_LISTEN_PORT = 4002;
 const LAN_DEVICE_CONTROL_PORT = 4003;
 const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
+const POWER_DRAW_CAPABILITY_INSTANCES = [
+  "electricPower",
+  "currentPower",
+  "power",
+  "powerW",
+  "sensorPower",
+  "powerConsumption",
+  "electricity"
+];
 
 module.exports = NodeHelper.create({
   start: function () {
@@ -301,6 +310,7 @@ module.exports = NodeHelper.create({
       return Object.assign({}, device, {
         online: cachedState.online,
         powerState: cachedState.powerState,
+        powerDrawWatts: cachedState.powerDrawWatts,
         temperature: cachedState.temperature,
         humidity: cachedState.humidity,
         brightness: cachedState.brightness,
@@ -451,6 +461,7 @@ module.exports = NodeHelper.create({
       roomName: "",
       online: true,
       powerState: this.parseLanPowerState(lanPayload),
+      powerDrawWatts: this.parseLanPowerDraw(lanPayload),
       temperature: undefined,
       humidity: undefined,
       brightness: undefined,
@@ -482,6 +493,31 @@ module.exports = NodeHelper.create({
     }
 
     return this.normalizeBoolean(this.getCapabilityState(capabilities, ["powerSwitch"]), undefined);
+  },
+
+  parseLanPowerDraw: function (lanPayload) {
+    var msg = lanPayload && lanPayload.msg ? lanPayload.msg : {};
+    var data = msg && msg.data ? msg.data : {};
+    var capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+    var fields = [
+      data.currentPower,
+      data.power,
+      data.powerDraw,
+      data.powerConsumption,
+      data.watt,
+      data.electricity
+    ];
+    var fieldIndex;
+    var parsed;
+
+    for (fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+      parsed = this.parsePowerDrawValue(fields[fieldIndex]);
+      if (typeof parsed !== "undefined") {
+        return parsed;
+      }
+    }
+
+    return this.extractPowerDrawFromCapabilities(capabilities);
   },
 
   fetchLanDeviceStatuses: function (lanDevices, timeoutMs, callback) {
@@ -806,6 +842,7 @@ module.exports = NodeHelper.create({
       roomName: String(staticDevice.roomName || ""),
       online: typeof staticDevice.online === "boolean" ? staticDevice.online : false,
       powerState: undefined,
+      powerDrawWatts: undefined,
       temperature: undefined,
       humidity: undefined,
       brightness: undefined,
@@ -858,6 +895,7 @@ module.exports = NodeHelper.create({
         online: true,
         localIp: lanMatch.localIp,
         powerState: typeof lanMatch.powerState !== "undefined" ? lanMatch.powerState : cloudDevice.powerState,
+        powerDrawWatts: typeof lanMatch.powerDrawWatts !== "undefined" ? lanMatch.powerDrawWatts : cloudDevice.powerDrawWatts,
         temperature: typeof lanMatch.temperature !== "undefined" ? lanMatch.temperature : cloudDevice.temperature,
         humidity: typeof lanMatch.humidity !== "undefined" ? lanMatch.humidity : cloudDevice.humidity,
         brightness: typeof lanMatch.brightness !== "undefined" ? lanMatch.brightness : cloudDevice.brightness,
@@ -881,6 +919,7 @@ module.exports = NodeHelper.create({
           roomName: device.roomName || device.room || "",
           online: device.online !== false,
           powerState: undefined,
+          powerDrawWatts: undefined,
           temperature: undefined,
           humidity: undefined,
           brightness: undefined,
@@ -1034,6 +1073,7 @@ module.exports = NodeHelper.create({
       roomName: device.roomName,
       online: this.normalizeBoolean(this.getCapabilityState(capabilities, ["online"]), device.online),
       powerState: this.normalizeBoolean(this.getCapabilityState(capabilities, ["powerSwitch"]), device.powerState),
+      powerDrawWatts: this.extractPowerDrawFromCapabilities(capabilities),
       temperature: this.getNumericCapabilityState(capabilities, ["sensorTemperature", "temperature"]),
       humidity: this.getNumericCapabilityState(capabilities, ["sensorHumidity", "humidity"]),
       brightness: this.getNumericCapabilityState(capabilities, ["brightness"]),
@@ -1041,6 +1081,82 @@ module.exports = NodeHelper.create({
       color: this.getCapabilityState(capabilities, ["colorRgb"]),
       source: device.source || "cloud"
     };
+  },
+
+  extractPowerDrawFromCapabilities: function (capabilities) {
+    var index;
+    var candidate;
+    var parsed;
+
+    for (index = 0; index < POWER_DRAW_CAPABILITY_INSTANCES.length; index += 1) {
+      candidate = this.getCapabilityState(capabilities, [POWER_DRAW_CAPABILITY_INSTANCES[index]]);
+      parsed = this.parsePowerDrawValue(candidate);
+      if (typeof parsed !== "undefined") {
+        return parsed;
+      }
+    }
+
+    return undefined;
+  },
+
+  parsePowerDrawValue: function (value) {
+    var normalized;
+    var amount;
+    var unit;
+    var match;
+
+    if (value === "" || value === null || typeof value === "undefined") {
+      return undefined;
+    }
+
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : undefined;
+    }
+
+    if (typeof value === "string") {
+      normalized = value.trim().toLowerCase();
+      if (!normalized) {
+        return undefined;
+      }
+
+      match = normalized.match(/(-?\d+(?:\.\d+)?)\s*(mw|kw|w)?/);
+      if (!match) {
+        return undefined;
+      }
+
+      amount = Number(match[1]);
+      if (!Number.isFinite(amount)) {
+        return undefined;
+      }
+
+      unit = match[2] || "w";
+      if (unit === "kw") {
+        amount *= 1000;
+      } else if (unit === "mw") {
+        amount /= 1000;
+      }
+
+      return amount;
+    }
+
+    if (typeof value === "object") {
+      amount = Number(value.value || value.power || value.currentPower || value.watt || value.watts || value.amount);
+
+      if (!Number.isFinite(amount)) {
+        return undefined;
+      }
+
+      unit = String(value.unit || value.unitName || "W").toLowerCase();
+      if (unit === "kw") {
+        amount *= 1000;
+      } else if (unit === "mw") {
+        amount /= 1000;
+      }
+
+      return amount;
+    }
+
+    return undefined;
   },
 
   getCapabilityState: function (capabilities, instanceNames) {
