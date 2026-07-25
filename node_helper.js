@@ -1,4 +1,5 @@
 const NodeHelper = require("node_helper");
+const http = require("node:http");
 const https = require("node:https");
 const dgram = require("node:dgram");
 
@@ -17,6 +18,8 @@ module.exports = NodeHelper.create({
     this.cachedEnrichedCloudDevices = [];
     this.lastCloudListFetchAt = 0;
     this.lastCloudStateFetchAt = 0;
+    this.homebridgeToken = null;
+    this.homebridgeTokenExpiry = 0;
   },
 
   sendDevicesData: function (devices, instanceId) {
@@ -50,6 +53,20 @@ module.exports = NodeHelper.create({
     var staticLanDevices = this.normalizeStaticLanDevices(requestOptions.lanStaticDevices);
     var cloudDeviceListRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceListRefreshInterval);
     var cloudDeviceStateRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceStateRefreshInterval);
+    var homebridgeUrl = String(requestOptions.homebridgeUrl || "").trim();
+    var homebridgeUsername = String(requestOptions.homebridgeUsername || "").trim();
+    var homebridgePassword = String(requestOptions.homebridgePassword || "");
+    var hasHomebridge = !!(homebridgeUrl && homebridgeUsername);
+
+    function finalSend(devices) {
+      if (!hasHomebridge) {
+        self.sendDevicesData(devices, instanceId);
+        return;
+      }
+      self.withHomebridgePower(homebridgeUrl, homebridgeUsername, homebridgePassword, devices, function (enrichedDevices) {
+        self.sendDevicesData(enrichedDevices, instanceId);
+      });
+    }
 
     function sendCloudData() {
       self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
@@ -58,7 +75,7 @@ module.exports = NodeHelper.create({
           return;
         }
 
-        self.sendDevicesData(devices, instanceId);
+        finalSend(devices);
       });
     }
 
@@ -75,7 +92,7 @@ module.exports = NodeHelper.create({
               return;
             }
 
-            self.sendDevicesData(lanDevicesWithStatus, instanceId);
+            finalSend(lanDevicesWithStatus);
             return;
           }
 
@@ -92,11 +109,11 @@ module.exports = NodeHelper.create({
 
             // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
             if (lanError && !lanDevicesWithStatus.length) {
-              self.sendDevicesData(cloudDevices, instanceId);
+              finalSend(cloudDevices);
               return;
             }
 
-            self.sendDevicesData(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus), instanceId);
+            finalSend(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus));
           });
         });
       });
@@ -305,7 +322,8 @@ module.exports = NodeHelper.create({
         humidity: cachedState.humidity,
         brightness: cachedState.brightness,
         colorTemperature: cachedState.colorTemperature,
-        color: cachedState.color
+        color: cachedState.color,
+        powerConsumption: cachedState.powerConsumption
       });
     });
   },
@@ -863,6 +881,7 @@ module.exports = NodeHelper.create({
         brightness: typeof lanMatch.brightness !== "undefined" ? lanMatch.brightness : cloudDevice.brightness,
         colorTemperature: typeof lanMatch.colorTemperature !== "undefined" ? lanMatch.colorTemperature : cloudDevice.colorTemperature,
         color: typeof lanMatch.color !== "undefined" ? lanMatch.color : cloudDevice.color,
+        powerConsumption: cloudDevice.powerConsumption,
         source: "cloud+lan"
       });
     });
@@ -1090,6 +1109,225 @@ module.exports = NodeHelper.create({
     }
 
     return fallbackValue;
+  },
+
+  withHomebridgePower: function (url, username, password, devices, callback) {
+    var self = this;
+
+    this.fetchHomebridgePowerMap(url, username, password, function (error, powerMap) {
+      if (error || !powerMap) {
+        callback(devices);
+        return;
+      }
+
+      callback(self.applyHomebridgePower(devices, powerMap));
+    });
+  },
+
+  fetchHomebridgePowerMap: function (url, username, password, callback) {
+    var self = this;
+    var now = Date.now();
+
+    function doFetch(token) {
+      self.fetchHomebridgeAccessories(url, token, callback);
+    }
+
+    if (this.homebridgeToken && now < this.homebridgeTokenExpiry) {
+      doFetch(this.homebridgeToken);
+      return;
+    }
+
+    this.authenticateHomebridge(url, username, password, function (err, token, expiresAt) {
+      if (err) {
+        callback(err, null);
+        return;
+      }
+
+      self.homebridgeToken = token;
+      self.homebridgeTokenExpiry = expiresAt;
+      doFetch(token);
+    });
+  },
+
+  authenticateHomebridge: function (baseUrl, username, password, callback) {
+    var urlInfo = this.parseSimpleUrl(baseUrl);
+    var isSettled = false;
+    var body = JSON.stringify({ username: username, password: password, otp: "" });
+    var lib = urlInfo.isHttps ? https : http;
+
+    function safeCallback(err, token, expiresAt) {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      callback(err, token, expiresAt);
+    }
+
+    var options = {
+      hostname: urlInfo.hostname,
+      port: urlInfo.port,
+      path: "/api/auth/sign-in",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
+      },
+      timeout: 10000
+    };
+
+    var req = lib.request(options, function (res) {
+      var data = "";
+
+      res.on("data", function (chunk) {
+        data += chunk;
+      });
+
+      res.on("end", function () {
+        try {
+          var parsed = JSON.parse(data);
+
+          if (parsed.access_token) {
+            var expiresIn = Number(parsed.expires_in) || 28800;
+            safeCallback(null, parsed.access_token, Date.now() + (expiresIn - 300) * 1000);
+          } else {
+            safeCallback(new Error("No access token in Homebridge auth response (HTTP " + res.statusCode + ")"));
+          }
+        } catch (e) {
+          safeCallback(new Error("Failed to parse Homebridge auth response: " + e.message));
+        }
+      });
+    });
+
+    req.on("timeout", function () {
+      req.destroy();
+      safeCallback(new Error("Homebridge auth timed out"));
+    });
+
+    req.on("error", function (err) {
+      safeCallback(new Error("Homebridge auth error: " + err.message));
+    });
+
+    req.write(body);
+    req.end();
+  },
+
+  fetchHomebridgeAccessories: function (baseUrl, token, callback) {
+    var self = this;
+    var urlInfo = this.parseSimpleUrl(baseUrl);
+    var isSettled = false;
+    var CONSUMPTION_UUID = "E863F10D-079E-48FF-8F27-9C2605A29F52";
+    var lib = urlInfo.isHttps ? https : http;
+
+    function safeCallback(err, result) {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      callback(err, result);
+    }
+
+    var options = {
+      hostname: urlInfo.hostname,
+      port: urlInfo.port,
+      path: "/api/accessories",
+      method: "GET",
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      timeout: 10000
+    };
+
+    var req = lib.request(options, function (res) {
+      var data = "";
+
+      res.on("data", function (chunk) {
+        data += chunk;
+      });
+
+      res.on("end", function () {
+        if (res.statusCode === 401) {
+          self.homebridgeToken = null;
+          self.homebridgeTokenExpiry = 0;
+          safeCallback(new Error("Homebridge token rejected (401) — will re-authenticate next cycle"));
+          return;
+        }
+
+        try {
+          var accessories = JSON.parse(data);
+          var powerMap = {};
+
+          (Array.isArray(accessories) ? accessories : []).forEach(function (acc) {
+            var name = acc.accessoryInformation && acc.accessoryInformation.Name
+              ? String(acc.accessoryInformation.Name).trim()
+              : "";
+
+            if (!name) {
+              return;
+            }
+
+            var chars = Array.isArray(acc.serviceCharacteristics) ? acc.serviceCharacteristics : [];
+            var consumptionChar = chars.find(function (c) {
+              return c && c.uuid === CONSUMPTION_UUID;
+            });
+
+            if (consumptionChar && typeof consumptionChar.value === "number") {
+              powerMap[name.toLowerCase()] = Math.round(consumptionChar.value * 10) / 10;
+            }
+          });
+
+          safeCallback(null, powerMap);
+        } catch (e) {
+          safeCallback(new Error("Failed to parse Homebridge accessories: " + e.message));
+        }
+      });
+    });
+
+    req.on("timeout", function () {
+      req.destroy();
+      safeCallback(new Error("Homebridge accessories request timed out"));
+    });
+
+    req.on("error", function (err) {
+      safeCallback(new Error("Homebridge accessories error: " + err.message));
+    });
+
+    req.end();
+  },
+
+  applyHomebridgePower: function (devices, powerMap) {
+    return devices.map(function (device) {
+      var name = String(device.deviceName || "").toLowerCase().trim();
+
+      if (name && Object.prototype.hasOwnProperty.call(powerMap, name)) {
+        return Object.assign({}, device, { powerConsumption: powerMap[name] });
+      }
+
+      return device;
+    });
+  },
+
+  parseSimpleUrl: function (urlString) {
+    var str = String(urlString || "").trim();
+    var isHttps = str.indexOf("https://") === 0;
+    var withoutProtocol = str.replace(/^https?:\/\//, "");
+    var slashIdx = withoutProtocol.indexOf("/");
+    var hostAndPort = slashIdx === -1 ? withoutProtocol : withoutProtocol.slice(0, slashIdx);
+    var colonIdx = hostAndPort.lastIndexOf(":");
+    var hostname;
+    var port;
+
+    if (colonIdx !== -1) {
+      hostname = hostAndPort.slice(0, colonIdx);
+      port = Number(hostAndPort.slice(colonIdx + 1)) || (isHttps ? 443 : 80);
+    } else {
+      hostname = hostAndPort;
+      port = isHttps ? 443 : 80;
+    }
+
+    return { isHttps: isHttps, hostname: hostname, port: port };
   },
 
   generateRequestId: function () {

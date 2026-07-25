@@ -24,6 +24,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Customizable light detection keywords
 - Appliance hiding with configurable keyword filters (enabled by default)
 - Optional LAN Control discovery for local-network device visibility
+- **Homebridge power consumption integration** — display live wattage on outlet cards sourced from the Homebridge REST API
 
 ## Requirements
 
@@ -183,6 +184,10 @@ Add to your `config.js`:
     compactCards: false,
     maxCompactCards: 12,
     fullWidthBottomBar: false,
+    homebridgeUrl: "",                  // Optional: Homebridge UI URL, e.g. "http://192.168.1.50:8581"
+    homebridgeUsername: "",             // Optional: Homebridge UI username
+    homebridgePassword: "",             // Optional: Homebridge UI password
+    showPowerConsumption: true,         // Show live wattage from Homebridge when available
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
     noApiKeyMessage: "API key not configured.",
@@ -223,6 +228,10 @@ Add to your `config.js`:
 | `noApiKeyMessage` | String | Message when API key not configured | `"API key not configured."` |
 | `errorMessage` | String | Error message | `"Error fetching Govee device data."` |
 | `fullWidthBottomBar` | Boolean | Span full width of bottom_bar position | `false` |
+| `homebridgeUrl` | String | Homebridge config-ui-x base URL (e.g. `"http://192.168.1.50:8581"`). Leave empty to disable. | `""` |
+| `homebridgeUsername` | String | Homebridge UI username | `""` |
+| `homebridgePassword` | String | Homebridge UI password | `""` |
+| `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
 
 ## Usage Examples
 
@@ -395,6 +404,28 @@ For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
    }
 },
 ```
+
+### Homebridge Power Consumption (Outlet Wattage)
+
+Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value on each refresh.
+
+The device name in Homebridge must match the Govee device name in your app **exactly** (case-insensitive). No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
+
+```javascript
+{
+   module: "MMM-GoveeSmartHomeStatus",
+   position: "top_right",
+   config: {
+      apiKey: "YOUR_GOVEE_API_KEY",
+      homebridgeUrl: "http://192.168.1.50:8581",
+      homebridgeUsername: "admin",
+      homebridgePassword: "yourpassword",
+      showPowerConsumption: true
+   }
+},
+```
+
+If Homebridge is unreachable or returns an error the Govee devices still display normally; the wattage value is simply omitted.
 
 ## Screenshots
 

@@ -350,6 +350,14 @@
   margin-top: 2px;
 }
 
+.compact-card-watt {
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  color: #facc15;
+  margin-top: 1px;
+}
+
 .compact-lan-status-badge {
   margin-top: 2px;
   padding: 1px 4px;
@@ -394,6 +402,11 @@
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-power {
+  font-size: 8.5px;
+  margin-top: 1px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .compact-card-watt {
   font-size: 8.5px;
   margin-top: 1px;
 }

@@ -29,7 +29,11 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
     noApiKeyMessage: "API key not configured.",
-    errorMessage: "Error fetching Govee device data."
+    errorMessage: "Error fetching Govee device data.",
+    homebridgeUrl: "",
+    homebridgeUsername: "",
+    homebridgePassword: "",
+    showPowerConsumption: true
   },
 
   start: function () {
@@ -62,7 +66,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       lanDiscoveryTargets: this.config.lanDiscoveryTargets,
       lanStaticDevices: this.config.lanStaticDevices,
       cloudDeviceListRefreshInterval: this.config.cloudDeviceListRefreshInterval,
-      cloudDeviceStateRefreshInterval: this.config.cloudDeviceStateRefreshInterval
+      cloudDeviceStateRefreshInterval: this.config.cloudDeviceStateRefreshInterval,
+      homebridgeUrl: this.config.homebridgeUrl,
+      homebridgeUsername: this.config.homebridgeUsername,
+      homebridgePassword: this.config.homebridgePassword
     });
 
     if (this.configRetryTimer) {
@@ -286,6 +293,14 @@ Module.register("MMM-GoveeSmartHomeStatus", {
           statusDiv.appendChild(humiditySpan);
         }
 
+        if (this.config.showPowerConsumption && typeof device.powerConsumption !== "undefined") {
+          var wattSpan = document.createElement("span");
+          wattSpan.className = "device-detail device-watt";
+          wattSpan.textContent = device.powerConsumption + "W";
+          statusDiv.appendChild(document.createElement("br"));
+          statusDiv.appendChild(wattSpan);
+        }
+
         deviceItem.appendChild(nameDiv);
         deviceItem.appendChild(statusDiv);
         deviceList.appendChild(deviceItem);
@@ -348,6 +363,13 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         powerDiv.className = "compact-card-power";
         powerDiv.textContent = device.powerState ? "ON" : "OFF";
         card.appendChild(powerDiv);
+      }
+
+      if (this.config.showPowerConsumption && typeof device.powerConsumption !== "undefined") {
+        var wattDiv = document.createElement("div");
+        wattDiv.className = "compact-card-watt";
+        wattDiv.textContent = device.powerConsumption + "W";
+        card.appendChild(wattDiv);
       }
 
       wrapper.appendChild(card);

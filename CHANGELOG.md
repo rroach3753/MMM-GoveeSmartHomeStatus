@@ -2,14 +2,15 @@
 
 ## [Unreleased]
 
-### Security
+## [1.2.0] - 2026-07-24
 
-- Added instance-scoped socket payload routing (`instanceId`) between frontend and node helper to reduce cross-instance data mixing.
-- Added response-size guards (1 MB cap) for cloud API handlers to prevent unbounded memory growth on malformed/oversized responses.
+### Added
 
-### Changed
-
-- Added `lint` npm script in `package.json` for consistent static checks across module updates.
+- Homebridge power consumption integration: optional polling of the Homebridge config-ui-x REST API to display live wattage on outlet device cards
+- New config options: `homebridgeUrl`, `homebridgeUsername`, `homebridgePassword`, `showPowerConsumption`
+- Watt value rendered on full-list device items and compact cards (yellow `#facc15` text) for any Govee device whose name matches a Homebridge accessory reporting `CurrentConsumption` (Eve UUID `E863F10D`)
+- JWT token caching with automatic re-authentication on expiry (~8 h); Homebridge failures are always silent and do not block Govee device display
+- `powerConsumption` field preserved across cloud-state cache refresh and LAN/cloud merge paths
 
 ## [1.1.0] - 2026-05-08
 
