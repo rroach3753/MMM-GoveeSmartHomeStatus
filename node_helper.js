@@ -1167,7 +1167,7 @@ module.exports = NodeHelper.create({
     var options = {
       hostname: urlInfo.hostname,
       port: urlInfo.port,
-      path: "/api/auth/sign-in",
+      path: "/api/auth/login",
       method: "POST",
       headers: {
         "Content-Type": "application/json",
