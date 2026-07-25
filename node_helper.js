@@ -1116,6 +1116,9 @@ module.exports = NodeHelper.create({
 
     this.fetchHomebridgePowerMap(url, username, password, function (error, powerMap) {
       if (error || !powerMap) {
+        if (error) {
+          console.error("[MMM-GoveeSmartHomeStatus] Homebridge error:", error.message);
+        }
         callback(devices);
         return;
       }
