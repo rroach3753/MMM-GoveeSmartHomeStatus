@@ -1176,7 +1176,8 @@ module.exports = NodeHelper.create({
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(body)
       },
-      timeout: 10000
+      timeout: 10000,
+      rejectUnauthorized: false
     };
 
     var req = lib.request(options, function (res) {
@@ -1240,7 +1241,8 @@ module.exports = NodeHelper.create({
         "Authorization": "Bearer " + token,
         "Content-Type": "application/json"
       },
-      timeout: 10000
+      timeout: 10000,
+      rejectUnauthorized: false
     };
 
     var req = lib.request(options, function (res) {
