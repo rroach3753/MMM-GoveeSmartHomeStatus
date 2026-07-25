@@ -1303,11 +1303,21 @@ module.exports = NodeHelper.create({
   },
 
   applyHomebridgePower: function (devices, powerMap) {
+    var availableNames = Object.keys(powerMap);
+    var goveeNames = devices.filter(function (d) { return d.deviceName; }).map(function (d) { return String(d.deviceName || "").toLowerCase().trim(); });
+    
+    console.error("[MMM-GoveeSmartHomeStatus] Homebridge matching debug:");
+    console.error("  Available in Homebridge (powerMap):", availableNames);
+    console.error("  Govee outlets:", goveeNames);
+    
     return devices.map(function (device) {
       var name = String(device.deviceName || "").toLowerCase().trim();
 
       if (name && Object.prototype.hasOwnProperty.call(powerMap, name)) {
+        console.error("  ✓ MATCHED:", name, "→", powerMap[name] + "W");
         return Object.assign({}, device, { powerConsumption: powerMap[name] });
+      } else if (name) {
+        console.error("  ✗ NO MATCH:", name);
       }
 
       return device;
