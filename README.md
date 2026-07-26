@@ -151,9 +151,9 @@ If you prefer, you can request/generate your API key directly in the Govee app:
 
 If you do not see the API key option in-app, update the app to the latest version and check the developer portal method above.
 
-## Configuration
+## Basic Config Example (Quick Start)
 
-Add to your `config.js`:
+Add this module block to your MagicMirror `config/config.js` file to get started:
 
 ```javascript
 {
@@ -195,6 +195,8 @@ Add to your `config.js`:
   }
 },
 ```
+
+Then restart MagicMirror.
 
 ## Configuration Options
 
