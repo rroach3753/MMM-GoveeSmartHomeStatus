@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "eslint": "^10.8.0",
-    "markdownlint-cli2": "^0.23.1"
+    "markdownlint-cli2": "^0.23.2"
   },
   "overrides": {
     "brace-expansion": "5.0.8",

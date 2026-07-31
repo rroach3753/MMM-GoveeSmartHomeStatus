@@ -155,6 +155,10 @@ If you do not see the API key option in-app, update the app to the latest versio
 
 Add this module block to your MagicMirror `config/config.js` file to get started:
 
+1. Install the module in your `MagicMirror/modules` folder.
+2. Paste this module block into the `modules: []` array in `config/config.js`.
+3. Save and restart MagicMirror.
+
 ```javascript
 {
   module: "MMM-GoveeSmartHomeStatus",
