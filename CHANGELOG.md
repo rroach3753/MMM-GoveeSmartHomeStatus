@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Simplified the README quick-start configuration to the minimum required settings
+- Updated ESLint to 10.8.1
+
+### Security
+
+- Updated the `brace-expansion` override to 5.0.9 to address a denial-of-service vulnerability
+
 ## [1.2.0] - 2026-07-24
 
 ### Added

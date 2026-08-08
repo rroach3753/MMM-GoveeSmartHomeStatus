@@ -164,38 +164,7 @@ Add this module block to your MagicMirror `config/config.js` file to get started
   module: "MMM-GoveeSmartHomeStatus",
   position: "top_right",
   config: {
-    apiKey: "YOUR_GOVEE_API_KEY",
-    title: "Govee Devices",
-    refreshInterval: 480000,           // Refresh every 8 minutes (ms)
-    showOnlineOnly: false,             // Show all devices or only online
-    showPower: true,                   // Display live power state when available
-    showTemperature: true,             // Display live temperature when available
-    showHumidity: true,                // Display live humidity when available
-    showLightsSummary: true,           // Show lights count summary
-    showRoomSummary: true,             // Show per-room summary
-    roomSummaryLightsOnly: false,      // Include all devices in room summary
-    lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led"],
-    hideAppliances: true,              // Hide appliance devices by keyword
-    hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
-    roomNameDelimiter: " - ",          // Room parsing from device names (e.g. "Kitchen - Lamp")
-    enableLanControl: false,
-    lanOnly: false,
-    lanDiscoveryTimeout: 4000,
-    lanDiscoveryTargets: [],            // Optional IPv4/CIDR targets for unicast LAN scan probes
-    lanStaticDevices: [],               // Optional static LAN devices for cross-subnet fallback
-    cloudDeviceListRefreshInterval: 0,  // 0 = fetch cloud device list every module refresh
-    cloudDeviceStateRefreshInterval: 0, // 0 = fetch cloud state every module refresh
-    compactCards: false,
-    maxCompactCards: 12,
-    fullWidthBottomBar: false,
-    homebridgeUrl: "",                  // Optional: Homebridge UI URL, e.g. "http://192.168.1.50:8581"
-    homebridgeUsername: "",             // Optional: Homebridge UI username
-    homebridgePassword: "",             // Optional: Homebridge UI password
-    showPowerConsumption: true,         // Show live wattage from Homebridge when available
-    emptyMessage: "No devices available.",
-    loadingMessage: "Loading Govee devices...",
-    noApiKeyMessage: "API key not configured.",
-    errorMessage: "Error fetching Govee device data."
+      apiKey: "YOUR_GOVEE_API_KEY"
   }
 },
 ```
