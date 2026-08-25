@@ -384,6 +384,8 @@ For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
 
 Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value on each refresh.
 
+Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
+
 The device name in Homebridge must match the Govee device name in your app **exactly** (case-insensitive). No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
 
 ```javascript

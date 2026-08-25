@@ -18,6 +18,14 @@ Module._load = function (request, parent, isMain) {
 const helper = require("../node_helper");
 Module._load = originalLoad;
 
+test("Homebridge accessory API explains the insecure mode requirement", () => {
+  const message = helper.getHomebridgeAccessoriesError(400, "Bad Request", {
+    message: "Homebridge must be running in insecure mode to access accessories."
+  });
+
+  assert.match(message, /requires insecure mode \(-I\)/);
+});
+
 test("Homebridge power map accepts Outlet Pro characteristic variants", () => {
   const accessories = [{
     accessoryInformation: { Name: "Homebridge Outlet Name" },

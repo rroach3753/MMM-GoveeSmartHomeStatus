@@ -1261,6 +1261,12 @@ module.exports = NodeHelper.create({
 
         try {
           var accessories = JSON.parse(data);
+
+          if (res.statusCode !== 200) {
+            safeCallback(new Error(self.getHomebridgeAccessoriesError(res.statusCode, res.statusMessage, accessories)));
+            return;
+          }
+
           safeCallback(null, self.buildHomebridgePowerMap(accessories));
         } catch (e) {
           safeCallback(new Error("Failed to parse Homebridge accessories: " + e.message));
@@ -1278,6 +1284,22 @@ module.exports = NodeHelper.create({
     });
 
     req.end();
+  },
+
+  getHomebridgeAccessoriesError: function (statusCode, statusMessage, responseBody) {
+    var responseMessage = responseBody && (responseBody.message || responseBody.error);
+
+    if (Array.isArray(responseMessage)) {
+      responseMessage = responseMessage.join(", ");
+    } else if (responseMessage && typeof responseMessage === "object") {
+      responseMessage = responseMessage.message;
+    }
+
+    if (String(responseMessage || "").toLowerCase().indexOf("insecure mode") !== -1) {
+      return "Homebridge accessory access requires insecure mode (-I): " + responseMessage;
+    }
+
+    return "Homebridge accessories HTTP " + statusCode + ": " + (responseMessage || statusMessage || "Unknown error");
   },
 
   buildHomebridgePowerMap: function (accessories) {
