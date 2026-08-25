@@ -293,6 +293,12 @@
   display: none;
 }
 
+.mmm-govee-smartHome.full-width-bottom-bar .device-detail.device-watt {
+  display: inline;
+  color: #facc15;
+  margin-top: 0;
+}
+
 /* Compact card layout */
 .compact-card-list {
   display: grid;

@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -17,6 +19,16 @@ Module._load = function (request, parent, isMain) {
 
 const helper = require("../node_helper");
 Module._load = originalLoad;
+
+test("full-width bottom bar keeps wattage visible", () => {
+  const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
+  const hiddenDetailsIndex = css.indexOf(".full-width-bottom-bar .device-detail {");
+  const visibleWattageIndex = css.indexOf(".full-width-bottom-bar .device-detail.device-watt {");
+
+  assert.ok(hiddenDetailsIndex !== -1);
+  assert.ok(visibleWattageIndex > hiddenDetailsIndex);
+  assert.match(css.slice(visibleWattageIndex), /display: inline;/);
+});
 
 test("Homebridge accessory API explains the insecure mode requirement", () => {
   const message = helper.getHomebridgeAccessoriesError(400, "Bad Request", {
