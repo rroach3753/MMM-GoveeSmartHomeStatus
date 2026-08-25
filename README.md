@@ -386,7 +386,7 @@ Display live wattage on outlet device cards by connecting to the Homebridge REST
 
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 
-The device name in Homebridge must match the Govee device name in your app **exactly** (case-insensitive). No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
+The module matches Homebridge accessories to Govee devices by device ID, with a case-insensitive device-name fallback. No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
 
 ```javascript
 {

@@ -28,7 +28,10 @@ test("Homebridge accessory API explains the insecure mode requirement", () => {
 
 test("Homebridge power map accepts Outlet Pro characteristic variants", () => {
   const accessories = [{
-    accessoryInformation: { Name: "Homebridge Outlet Name" },
+    accessoryInformation: {
+      Name: "Homebridge Outlet Name",
+      "Serial Number": "AA:BB:CC:DD"
+    },
     serviceCharacteristics: [{
       uuid: "e863f10d-079e-48ff-8f27-9c2605a29f52",
       serviceName: "Outlet Pro",
@@ -38,8 +41,26 @@ test("Homebridge power map accepts Outlet Pro characteristic variants", () => {
 
   assert.deepEqual(helper.buildHomebridgePowerMap(accessories), {
     "homebridge outlet name": 12.3,
+    "aa:bb:cc:dd": 12.3,
     "outlet pro": 12.3
   });
+});
+
+test("Homebridge power matches Govee device ID when display names differ", () => {
+  const devices = [{
+    deviceId: "AA:BB:CC:DD",
+    deviceName: "Govee Outlet Name"
+  }];
+  const powerMap = {
+    "aa:bb:cc:dd": 18.7,
+    "homebridge outlet name": 18.7
+  };
+
+  assert.deepEqual(helper.applyHomebridgePower(devices, powerMap), [{
+    deviceId: "AA:BB:CC:DD",
+    deviceName: "Govee Outlet Name",
+    powerConsumption: 18.7
+  }]);
 });
 
 test("Homebridge power map retains zero watts and rejects invalid readings", () => {

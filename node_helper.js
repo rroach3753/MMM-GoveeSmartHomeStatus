@@ -1327,6 +1327,7 @@ module.exports = NodeHelper.create({
 
       names = [
         accessory.accessoryInformation && accessory.accessoryInformation.Name,
+        accessory.accessoryInformation && accessory.accessoryInformation["Serial Number"],
         consumptionCharacteristic.serviceName
       ];
 
@@ -1344,10 +1345,17 @@ module.exports = NodeHelper.create({
 
   applyHomebridgePower: function (devices, powerMap) {
     return devices.map(function (device) {
-      var name = String(device.deviceName || "").toLowerCase().trim();
+      var identifiers = [device.deviceId, device.deviceName];
+      var matchingIdentifier = identifiers.find(function (identifier) {
+        var normalizedIdentifier = String(identifier || "").toLowerCase().trim();
 
-      if (name && Object.prototype.hasOwnProperty.call(powerMap, name)) {
-        return Object.assign({}, device, { powerConsumption: powerMap[name] });
+        return normalizedIdentifier && Object.prototype.hasOwnProperty.call(powerMap, normalizedIdentifier);
+      });
+
+      if (matchingIdentifier) {
+        return Object.assign({}, device, {
+          powerConsumption: powerMap[String(matchingIdentifier).toLowerCase().trim()]
+        });
       }
 
       return device;
