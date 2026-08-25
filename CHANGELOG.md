@@ -7,6 +7,10 @@
 - Simplified the README quick-start configuration to the minimum required settings
 - Updated ESLint to 10.8.1
 
+### Fixed
+
+- Restored Outlet Pro power draw when Homebridge reports wattage with a service name, lowercase characteristic UUID, or numeric string value
+
 ### Security
 
 - Updated the `brace-expansion` override to 5.0.9 to address a denial-of-service vulnerability

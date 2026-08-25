@@ -1220,7 +1220,6 @@ module.exports = NodeHelper.create({
     var self = this;
     var urlInfo = this.parseSimpleUrl(baseUrl);
     var isSettled = false;
-    var CONSUMPTION_UUID = "E863F10D-079E-48FF-8F27-9C2605A29F52";
     var lib = urlInfo.isHttps ? https : http;
 
     function safeCallback(err, result) {
@@ -1262,28 +1261,7 @@ module.exports = NodeHelper.create({
 
         try {
           var accessories = JSON.parse(data);
-          var powerMap = {};
-
-          (Array.isArray(accessories) ? accessories : []).forEach(function (acc) {
-            var name = acc.accessoryInformation && acc.accessoryInformation.Name
-              ? String(acc.accessoryInformation.Name).trim()
-              : "";
-
-            if (!name) {
-              return;
-            }
-
-            var chars = Array.isArray(acc.serviceCharacteristics) ? acc.serviceCharacteristics : [];
-            var consumptionChar = chars.find(function (c) {
-              return c && c.uuid === CONSUMPTION_UUID;
-            });
-
-            if (consumptionChar && typeof consumptionChar.value === "number") {
-              powerMap[name.toLowerCase()] = Math.round(consumptionChar.value * 10) / 10;
-            }
-          });
-
-          safeCallback(null, powerMap);
+          safeCallback(null, self.buildHomebridgePowerMap(accessories));
         } catch (e) {
           safeCallback(new Error("Failed to parse Homebridge accessories: " + e.message));
         }
@@ -1300,6 +1278,46 @@ module.exports = NodeHelper.create({
     });
 
     req.end();
+  },
+
+  buildHomebridgePowerMap: function (accessories) {
+    var consumptionUuid = "E863F10D-079E-48FF-8F27-9C2605A29F52";
+    var powerMap = {};
+
+    (Array.isArray(accessories) ? accessories : []).forEach(function (accessory) {
+      var characteristics = Array.isArray(accessory.serviceCharacteristics)
+        ? accessory.serviceCharacteristics
+        : [];
+      var consumptionCharacteristic = characteristics.find(function (characteristic) {
+        return characteristic && String(characteristic.uuid || "").toUpperCase() === consumptionUuid;
+      });
+      var numericValue;
+      var names;
+
+      if (!consumptionCharacteristic || consumptionCharacteristic.value === "" || consumptionCharacteristic.value === null) {
+        return;
+      }
+
+      numericValue = Number(consumptionCharacteristic.value);
+      if (!Number.isFinite(numericValue)) {
+        return;
+      }
+
+      names = [
+        accessory.accessoryInformation && accessory.accessoryInformation.Name,
+        consumptionCharacteristic.serviceName
+      ];
+
+      names.forEach(function (name) {
+        var normalizedName = String(name || "").trim().toLowerCase();
+
+        if (normalizedName) {
+          powerMap[normalizedName] = Math.round(numericValue * 10) / 10;
+        }
+      });
+    });
+
+    return powerMap;
   },
 
   applyHomebridgePower: function (devices, powerMap) {
