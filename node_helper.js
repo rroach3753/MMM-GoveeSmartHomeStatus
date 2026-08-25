@@ -2,6 +2,7 @@ const NodeHelper = require("node_helper");
 const http = require("node:http");
 const https = require("node:https");
 const dgram = require("node:dgram");
+const { Bonjour } = require("bonjour-service");
 
 const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
 const LAN_DISCOVERY_GROUP = "239.255.255.250";
@@ -20,6 +21,7 @@ module.exports = NodeHelper.create({
     this.lastCloudStateFetchAt = 0;
     this.homebridgeToken = null;
     this.homebridgeTokenExpiry = 0;
+    this.homebridgeFallbackUrls = {};
   },
 
   sendDevicesData: function (devices, instanceId) {
@@ -1129,6 +1131,36 @@ module.exports = NodeHelper.create({
 
   fetchHomebridgePowerMap: function (url, username, password, callback) {
     var self = this;
+    var fallbackUrl = this.homebridgeFallbackUrls[url];
+
+    if (fallbackUrl) {
+      this.fetchHomebridgePowerMapAtUrl(fallbackUrl, username, password, callback);
+      return;
+    }
+
+    this.fetchHomebridgePowerMapAtUrl(url, username, password, function (error, powerMap) {
+      if (!self.isHomebridgeDnsError(error)) {
+        callback(error, powerMap);
+        return;
+      }
+
+      self.discoverHomebridgeUrl(url, function (discoveryError, discoveredUrl) {
+        if (discoveryError || !discoveredUrl) {
+          callback(error, null);
+          return;
+        }
+
+        self.homebridgeFallbackUrls[url] = discoveredUrl;
+        self.homebridgeToken = null;
+        self.homebridgeTokenExpiry = 0;
+        console.warn("[MMM-GoveeSmartHomeStatus] Homebridge hostname could not resolve; using discovered endpoint " + discoveredUrl);
+        self.fetchHomebridgePowerMapAtUrl(discoveredUrl, username, password, callback);
+      });
+    });
+  },
+
+  fetchHomebridgePowerMapAtUrl: function (url, username, password, callback) {
+    var self = this;
     var now = Date.now();
 
     function doFetch(token) {
@@ -1150,6 +1182,61 @@ module.exports = NodeHelper.create({
       self.homebridgeTokenExpiry = expiresAt;
       doFetch(token);
     });
+  },
+
+  isHomebridgeDnsError: function (error) {
+    var message = error && error.message ? error.message : "";
+
+    return !!error && (error.code === "ENOTFOUND" || error.code === "EAI_AGAIN" || /\b(?:ENOTFOUND|EAI_AGAIN)\b/.test(message));
+  },
+
+  discoverHomebridgeUrl: function (configuredUrl, callback) {
+    var self = this;
+    var bonjour = new Bonjour();
+    var browser;
+    var isSettled = false;
+    var timeout;
+
+    function finish(error, discoveredUrl) {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      clearTimeout(timeout);
+      if (browser) {
+        browser.stop();
+      }
+      bonjour.destroy();
+      callback(error, discoveredUrl);
+    }
+
+    browser = bonjour.find({ type: "http", protocol: "tcp" }, function (service) {
+      var discoveredUrl = self.getHomebridgeDiscoveryUrl(configuredUrl, service);
+
+      if (discoveredUrl) {
+        finish(null, discoveredUrl);
+      }
+    });
+
+    timeout = setTimeout(function () {
+      finish(new Error("No matching Homebridge web service was discovered"), null);
+    }, 3000);
+  },
+
+  getHomebridgeDiscoveryUrl: function (configuredUrl, service) {
+    var configured = this.parseSimpleUrl(configuredUrl);
+    var serviceName = String(service && service.name || "");
+    var addresses = service && Array.isArray(service.addresses) ? service.addresses : [];
+    var address = addresses.find(function (candidate) {
+      return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(candidate);
+    });
+
+    if (!/homebridge/i.test(serviceName) || Number(service && service.port) !== configured.port || !address) {
+      return null;
+    }
+
+    return (configured.isHttps ? "https://" : "http://") + address + ":" + configured.port;
   },
 
   authenticateHomebridge: function (baseUrl, username, password, callback) {

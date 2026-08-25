@@ -38,6 +38,61 @@ test("Homebridge accessory API explains the insecure mode requirement", () => {
   assert.match(message, /requires insecure mode \(-I\)/);
 });
 
+test("Homebridge discovery preserves HTTPS and requires a matching web service port", () => {
+  const service = {
+    name: "Homebridge DC",
+    port: 8581,
+    addresses: ["fe80::1", "192.0.2.18"]
+  };
+
+  assert.equal(
+    helper.getHomebridgeDiscoveryUrl("https://missing.example.com:8581", service),
+    "https://192.0.2.18:8581"
+  );
+  assert.equal(
+    helper.getHomebridgeDiscoveryUrl("https://missing.example.com:443", service),
+    null
+  );
+});
+
+test("Homebridge power retries through discovery only after DNS failure", async () => {
+  const originalFetch = helper.fetchHomebridgePowerMapAtUrl;
+  const originalDiscover = helper.discoverHomebridgeUrl;
+  const attempts = [];
+
+  helper.homebridgeFallbackUrls = {};
+  helper.fetchHomebridgePowerMapAtUrl = (url, username, password, callback) => {
+    attempts.push(url);
+    if (attempts.length === 1) {
+      const error = new Error("getaddrinfo ENOTFOUND missing.example.com");
+      error.code = "ENOTFOUND";
+      callback(error, null);
+      return;
+    }
+    callback(null, { "ebike - pro": 175 });
+  };
+  helper.discoverHomebridgeUrl = (url, callback) => callback(null, "https://192.0.2.18:8581");
+
+  try {
+    const powerMap = await new Promise((resolve, reject) => {
+      helper.fetchHomebridgePowerMap("https://missing.example.com:8581", "user", "password", (error, result) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(result);
+      });
+    });
+
+    assert.deepEqual(attempts, ["https://missing.example.com:8581", "https://192.0.2.18:8581"]);
+    assert.equal(powerMap["ebike - pro"], 175);
+  } finally {
+    helper.fetchHomebridgePowerMapAtUrl = originalFetch;
+    helper.discoverHomebridgeUrl = originalDiscover;
+    helper.homebridgeFallbackUrls = {};
+  }
+});
+
 test("Homebridge power map accepts Outlet Pro characteristic variants", () => {
   const accessories = [{
     accessoryInformation: {

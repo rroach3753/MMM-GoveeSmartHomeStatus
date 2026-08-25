@@ -13,6 +13,7 @@
 - Reported Homebridge accessory API errors instead of silently treating insecure-mode failures as an empty wattage result
 - Matched Homebridge power readings to Govee devices by stable device ID when their display names differ
 - Kept outlet wattage visible in the standard full-width bottom-bar layout
+- Added Bonjour fallback discovery when the configured Homebridge hostname cannot resolve
 
 ### Security
 
