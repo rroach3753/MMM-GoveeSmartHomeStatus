@@ -22,7 +22,7 @@
     "url": "https://github.com/rroach3753/MMM-GoveeSmartHomeStatus.git"
   },
   "devDependencies": {
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "markdownlint-cli2": "^0.23.2"
   },
   "overrides": {
