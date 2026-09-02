@@ -47,7 +47,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     };
 
     this.configRetryCount = 0;
-    this.maxConfigRetries = 3;
     this.requestBackendData();
   },
 
@@ -77,15 +76,30 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }
 
     this.configRetryTimer = setTimeout(function () {
-      if (self.dataState.loading && self.configRetryCount < self.maxConfigRetries) {
-        self.configRetryCount += 1;
-        self.requestBackendData();
-      } else if (self.dataState.loading) {
-        self.dataState.loading = false;
-        self.dataState.error = "Unable to fetch Govee device data. Check API key and connection.";
-        self.updateDom(300);
+      if (!self.dataState.loading) {
+        return;
       }
+
+      self.dataState.loading = false;
+      self.dataState.error = "Unable to fetch Govee device data. Check API key and connection.";
+      self.updateDom(300);
+      self.scheduleBackendRetry();
     }, requestTimeout);
+  },
+
+  scheduleBackendRetry: function () {
+    var self = this;
+    var retryDelay = Math.min(5000 * Math.pow(1.5, this.configRetryCount), 30000);
+
+    if (this.configRetryTimer) {
+      clearTimeout(this.configRetryTimer);
+    }
+
+    console.warn("[MMM-GoveeSmartHomeStatus] Retrying in " + (retryDelay / 1000) + " seconds...");
+    this.configRetryTimer = setTimeout(function () {
+      self.configRetryCount += 1;
+      self.requestBackendData();
+    }, retryDelay);
   },
 
   getRequestTimeout: function () {
@@ -139,17 +153,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         clearTimeout(this.configRetryTimer);
       }
 
-      // Set up automatic retry after error with exponential backoff
-      var retryDelay = Math.min(5000 * Math.pow(1.5, this.configRetryCount), 30000);
-      console.warn("[MMM-GoveeSmartHomeStatus] Error occurred. Retrying in " + (retryDelay / 1000) + " seconds...");
-      
-      this.configRetryTimer = setTimeout(function () {
-        if (self.configRetryCount < self.maxConfigRetries) {
-          self.configRetryCount += 1;
-          self.dataState.loading = true;
-          self.requestBackendData();
-        }
-      }, retryDelay);
+      this.scheduleBackendRetry();
 
       this.updateDom(this.hasRenderedData ? 0 : 300);
       this.hasRenderedData = true;

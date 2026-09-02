@@ -16,6 +16,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Real-time device list updates
 - Refreshes update in place after the first render without flashing the module
 - Configurable refresh interval
+- Automatic recovery after temporary network or access-point outages
 - Full-width bottom bar layout option for compact device display
 - **Compact multi-column card grid layout** with 3-4 cards per row (ideal for side panels)
 - Compact cards sorted by room name, then device name
@@ -467,6 +468,12 @@ The module classifies a device as a light when its name, type, or model contains
 ```
 
 ## Troubleshooting
+
+### Device Updates Do Not Resume After a Network Outage
+
+The module automatically retries failed or timed-out requests with exponential backoff, capped at one attempt every 30 seconds. After the network or wireless access point becomes available, device updates should resume without restarting MagicMirror.
+
+If updates do not resume after allowing time for the next retry, check the MagicMirror logs and verify DNS and API connectivity using the steps below. Restart MagicMirror after installing a module update so the updated browser and node helper code are loaded.
 
 ### DNS Resolution Error: "getaddrinfo ENOTFOUND api.govee.com"
 

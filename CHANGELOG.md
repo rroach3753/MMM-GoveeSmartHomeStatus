@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Continued retrying with capped backoff after prolonged network outages so device updates recover without restarting MagicMirror
 - Restored Outlet Pro power draw when Homebridge reports wattage with a service name, lowercase characteristic UUID, or numeric string value
 - Reported Homebridge accessory API errors instead of silently treating insecure-mode failures as an empty wattage result
 - Matched Homebridge power readings to Govee devices by stable device ID when their display names differ

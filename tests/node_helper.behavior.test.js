@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const Module = require("node:module");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -19,6 +20,59 @@ Module._load = function (request, parent, isMain) {
 
 const helper = require("../node_helper");
 Module._load = originalLoad;
+
+function loadFrontendModule() {
+  const source = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.js"), "utf8");
+  let definition;
+  let nextTimerId = 1;
+  const timers = new Map();
+  const context = {
+    Module: {
+      register(name, moduleDefinition) {
+        definition = moduleDefinition;
+      }
+    },
+    console: { warn() {} },
+    clearTimeout(timerId) {
+      timers.delete(timerId);
+    },
+    setTimeout(callback, delay) {
+      const timerId = nextTimerId++;
+      timers.set(timerId, { callback, delay });
+      return timerId;
+    }
+  };
+
+  vm.runInNewContext(source, context);
+  return { definition, timers };
+}
+
+test("frontend continues retrying after more than three connection failures", () => {
+  const { definition, timers } = loadFrontendModule();
+  const moduleInstance = Object.assign({}, definition, {
+    config: Object.assign({}, definition.defaults, { apiKey: "test-key" }),
+    identifier: "test-instance",
+    sendSocketNotification() {},
+    updateDom() {}
+  });
+
+  moduleInstance.start();
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    moduleInstance.socketNotificationReceived("GOVEE_DEVICES_ERROR", {
+      instanceId: "test-instance",
+      error: "Network unavailable"
+    });
+
+    const retryTimer = timers.get(moduleInstance.configRetryTimer);
+    assert.ok(retryTimer, "retry timer should remain scheduled after failure " + (attempt + 1));
+    retryTimer.callback();
+  }
+
+  assert.equal(moduleInstance.configRetryCount, 5);
+  assert.equal(moduleInstance.dataState.loading, true);
+  assert.ok(timers.has(moduleInstance.configRetryTimer));
+});
 
 test("full-width bottom bar keeps wattage visible", () => {
   const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
