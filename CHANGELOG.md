@@ -2,10 +2,17 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-09
+
+### Added
+
+- Added room-grouped compact cards with room headings, on/total counts, shortened local device labels, configurable room order, and room-aware card limiting
+
 ### Changed
 
 - Simplified the README quick-start configuration to the minimum required settings
 - Updated ESLint to 10.8.1
+- Compact card layouts now group devices by room by default and hide the redundant room summary
 
 ### Fixed
 

@@ -26,6 +26,11 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     fullWidthBottomBar: false,
     compactCards: false,
     maxCompactCards: 12,
+    groupCompactCardsByRoom: true,
+    shortenGroupedDeviceNames: true,
+    showCountsInRoomHeaders: true,
+    hideRoomSummaryWhenGrouped: true,
+    roomOrder: [],
     emptyMessage: "No devices available.",
     loadingMessage: "Loading Govee devices...",
     noApiKeyMessage: "API key not configured.",
@@ -321,11 +326,26 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   createCompactCardList: function (devices) {
     var maxCards = Number(this.config.maxCompactCards) || 12;
-    var sortedDevices = this.sortDevicesForCards(devices);
-    var devicesToShow = sortedDevices.slice(0, maxCards);
+    var devicesToShow = this.selectCompactCardDevices(devices, maxCards);
 
     var wrapper = document.createElement("div");
     wrapper.className = "compact-card-list";
+
+    if (this.config.groupCompactCardsByRoom) {
+      var allRoomGroups = this.buildCompactRoomGroups(devices);
+      wrapper.classList.add("grouped-by-room");
+      this.buildCompactRoomGroups(devicesToShow).forEach(function (group) {
+        var fullGroup = allRoomGroups.find(function (candidate) {
+          return candidate.room === group.room;
+        });
+        if (fullGroup) {
+          group.on = fullGroup.on;
+          group.total = fullGroup.total;
+        }
+        wrapper.appendChild(this.createCompactRoomGroup(group));
+      }.bind(this));
+      return wrapper;
+    }
 
     if (this.config.fullWidthBottomBar) {
       wrapper.classList.add("bottom-bar-compact");
@@ -339,49 +359,168 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }
 
     devicesToShow.forEach(function (device) {
-      var card = document.createElement("div");
-      card.className = "compact-card";
-
-      if (!device.online) {
-        card.classList.add("offline");
-      }
-
-      if (device.powerState === true) {
-        card.classList.add("on");
-      }
-
-      // Card content
-      var nameDiv = document.createElement("div");
-      nameDiv.className = "compact-card-name";
-      nameDiv.textContent = device.deviceName || "Unknown";
-      card.appendChild(nameDiv);
-
-      var compactLanBadgeLabel = this.getLanBadgeLabel(device);
-      if (compactLanBadgeLabel) {
-        var compactLanBadge = document.createElement("div");
-        compactLanBadge.className = "compact-lan-status-badge";
-        compactLanBadge.textContent = compactLanBadgeLabel;
-        card.appendChild(compactLanBadge);
-      }
-
-      if (this.config.showPower && typeof device.powerState !== "undefined") {
-        var powerDiv = document.createElement("div");
-        powerDiv.className = "compact-card-power";
-        powerDiv.textContent = device.powerState ? "ON" : "OFF";
-        card.appendChild(powerDiv);
-      }
-
-      if (this.config.showPowerConsumption && typeof device.powerConsumption !== "undefined") {
-        var wattDiv = document.createElement("div");
-        wattDiv.className = "compact-card-watt";
-        wattDiv.textContent = device.powerConsumption + "W";
-        card.appendChild(wattDiv);
-      }
-
-      wrapper.appendChild(card);
+      wrapper.appendChild(this.createCompactCard(device, device.deviceName || "Unknown"));
     }.bind(this));
 
     return wrapper;
+  },
+
+  createCompactCard: function (device, displayName) {
+    var card = document.createElement("div");
+    card.className = "compact-card";
+
+    if (!device.online) {
+      card.classList.add("offline");
+    }
+
+    if (device.powerState === true) {
+      card.classList.add("on");
+    }
+
+    var nameDiv = document.createElement("div");
+    nameDiv.className = "compact-card-name";
+    nameDiv.textContent = displayName;
+    card.appendChild(nameDiv);
+
+    var compactLanBadgeLabel = this.getLanBadgeLabel(device);
+    if (compactLanBadgeLabel) {
+      var compactLanBadge = document.createElement("div");
+      compactLanBadge.className = "compact-lan-status-badge";
+      compactLanBadge.textContent = compactLanBadgeLabel;
+      card.appendChild(compactLanBadge);
+    }
+
+    if (this.config.showPower && typeof device.powerState !== "undefined") {
+      var powerDiv = document.createElement("div");
+      powerDiv.className = "compact-card-power";
+      powerDiv.textContent = device.powerState ? "ON" : "OFF";
+      card.appendChild(powerDiv);
+    }
+
+    if (this.config.showPowerConsumption && typeof device.powerConsumption !== "undefined") {
+      var wattDiv = document.createElement("div");
+      wattDiv.className = "compact-card-watt";
+      wattDiv.textContent = device.powerConsumption + "W";
+      card.appendChild(wattDiv);
+    }
+
+    return card;
+  },
+
+  createCompactRoomGroup: function (group) {
+    var roomGroup = document.createElement("section");
+    var header = document.createElement("div");
+    var roomName = document.createElement("span");
+    var cards = document.createElement("div");
+
+    roomGroup.className = "compact-room-group";
+    header.className = "compact-room-header";
+    roomName.className = "compact-room-name";
+    roomName.textContent = group.room;
+    header.appendChild(roomName);
+
+    if (this.config.showCountsInRoomHeaders) {
+      var count = document.createElement("span");
+      count.className = "compact-room-count";
+      count.textContent = group.on + "/" + group.total + " on";
+      header.appendChild(count);
+    }
+
+    cards.className = "compact-room-cards";
+    group.devices.forEach(function (device) {
+      cards.appendChild(this.createCompactCard(device, this.getGroupedDeviceName(device, group.room)));
+    }.bind(this));
+
+    roomGroup.appendChild(header);
+    roomGroup.appendChild(cards);
+    return roomGroup;
+  },
+
+  getGroupedDeviceName: function (device, room) {
+    var deviceName = String(device.deviceName || "Unknown").trim();
+    var delimiter = String(this.config.roomNameDelimiter || " - ");
+    var prefix = room + delimiter;
+
+    if (this.config.shortenGroupedDeviceNames && room !== "Unassigned" && deviceName.indexOf(prefix) === 0) {
+      return deviceName.slice(prefix.length).trim() || deviceName;
+    }
+
+    return deviceName;
+  },
+
+  buildCompactRoomGroups: function (devices) {
+    var groups = {};
+
+    this.sortDevicesForCards(devices).forEach(function (device) {
+      var room = this.inferRoomName(device);
+      if (!groups[room]) {
+        groups[room] = { room: room, devices: [], on: 0, total: 0 };
+      }
+
+      groups[room].devices.push(device);
+      groups[room].total += 1;
+      if (device.powerState === true) {
+        groups[room].on += 1;
+      }
+    }.bind(this));
+
+    return Object.keys(groups).map(function (room) {
+      return groups[room];
+    }).sort(function (left, right) {
+      return this.compareRoomNames(left.room, right.room);
+    }.bind(this));
+  },
+
+  selectCompactCardDevices: function (devices, maxCards) {
+    var sortedDevices = this.sortDevicesForCards(devices);
+    var limit = Math.max(1, maxCards);
+
+    if (!this.config.groupCompactCardsByRoom || sortedDevices.length <= limit) {
+      return sortedDevices.slice(0, limit);
+    }
+
+    var groups = this.buildCompactRoomGroups(sortedDevices);
+    var selected = [];
+    var deviceIndex = 0;
+    var addedDevice = true;
+
+    while (selected.length < limit && addedDevice) {
+      addedDevice = false;
+      groups.forEach(function (group) {
+        if (selected.length < limit && group.devices[deviceIndex]) {
+          selected.push(group.devices[deviceIndex]);
+          addedDevice = true;
+        }
+      });
+      deviceIndex += 1;
+    }
+
+    return selected;
+  },
+
+  compareRoomNames: function (leftRoom, rightRoom) {
+    var roomOrder = Array.isArray(this.config.roomOrder) ? this.config.roomOrder : [];
+    var normalizedOrder = roomOrder.map(function (room) {
+      return String(room).toLowerCase();
+    });
+    var leftIndex = normalizedOrder.indexOf(String(leftRoom).toLowerCase());
+    var rightIndex = normalizedOrder.indexOf(String(rightRoom).toLowerCase());
+
+    if (leftRoom === "Unassigned" || rightRoom === "Unassigned") {
+      return leftRoom === rightRoom ? 0 : (leftRoom === "Unassigned" ? 1 : -1);
+    }
+
+    if (leftIndex !== rightIndex) {
+      if (leftIndex === -1) {
+        return 1;
+      }
+      if (rightIndex === -1) {
+        return -1;
+      }
+      return leftIndex - rightIndex;
+    }
+
+    return leftRoom.localeCompare(rightRoom, undefined, { sensitivity: "base" });
   },
 
   sortDevicesForCards: function (devices) {
@@ -399,7 +538,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         return leftUnassigned ? 1 : -1;
       }
 
-      roomCompare = leftRoom.localeCompare(rightRoom, undefined, { sensitivity: "base" });
+      roomCompare = self.compareRoomNames(leftRoom, rightRoom);
       if (roomCompare !== 0) {
         return roomCompare;
       }
@@ -491,7 +630,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       hasSummary = true;
     }
 
-    if (this.config.showRoomSummary) {
+    if (this.config.showRoomSummary && !(this.config.compactCards && this.config.groupCompactCardsByRoom && this.config.hideRoomSummaryWhenGrouped)) {
       var roomSummary = this.buildRoomSummary(devices);
       summaryWrap.appendChild(roomSummary);
       hasSummary = true;

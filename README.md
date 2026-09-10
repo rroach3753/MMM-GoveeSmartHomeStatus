@@ -201,6 +201,11 @@ Then restart MagicMirror.
 | `cloudDeviceStateRefreshInterval` | Number | Cloud device-state refresh interval in milliseconds. `0` keeps legacy behavior (every module refresh). | `0` |
 | `compactCards` | Boolean | Display devices as compact horizontal cards (scrollable) | `false` |
 | `maxCompactCards` | Number | Maximum number of devices to show in compact card view | `12` |
+| `groupCompactCardsByRoom` | Boolean | Organize compact cards into labeled room sections | `true` |
+| `shortenGroupedDeviceNames` | Boolean | Remove an exact room prefix from card labels inside room sections | `true` |
+| `showCountsInRoomHeaders` | Boolean | Show each room's on/total count in its section heading | `true` |
+| `hideRoomSummaryWhenGrouped` | Boolean | Hide the redundant room summary when grouped compact cards are displayed | `true` |
+| `roomOrder` | Array | Optional preferred room order; unspecified rooms follow alphabetically | `[]` |
 | `emptyMessage` | String | Message when no devices available | `"No devices available."` |
 | `loadingMessage` | String | Loading message | `"Loading Govee devices..."` |
 | `noApiKeyMessage` | String | Message when API key not configured | `"API key not configured."` |
@@ -374,21 +379,30 @@ For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
 
 `lanStaticDevices` adds known devices even when cross-subnet UDP replies are blocked.
 
-### Compact Cards Layout with Room Summaries
+### Compact Cards Grouped by Room
+
+Compact cards are grouped into room sections by default. Device names that begin with the inferred room and `roomNameDelimiter` display only their local label, such as `Couch Left` instead of `Living Room - Couch Left`. Devices remain alphabetical within each room, and `Unassigned` is placed last.
+
+When `maxCompactCards` is lower than the device count, selection rotates across rooms so later rooms are not excluded entirely. Room headings continue to show counts for all matching devices.
 
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
-   position: "bottom_right",
+   position: "bottom_bar",
    config: {
       apiKey: "YOUR_GOVEE_API_KEY",
       compactCards: true,
-      maxCompactCards: 12,
+      fullWidthBottomBar: true,
+      maxCompactCards: 40,
+      groupCompactCardsByRoom: true,
+      roomOrder: ["Living Room", "Office", "Primary Bath", "Bedroom"],
       showRoomSummary: true,
       showLightsSummary: true
    }
 },
 ```
+
+Set `groupCompactCardsByRoom: false` to restore the original flat compact-card grid. Set `hideRoomSummaryWhenGrouped: false` to display both room headings and the separate room summary.
 
 ### Homebridge Power Consumption (Outlet Wattage)
 

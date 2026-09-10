@@ -86,6 +86,51 @@ test("full-width bottom bar keeps wattage visible", () => {
   assert.match(css.slice(visibleWattageIndex), /display: inline;/);
 });
 
+test("compact cards group by configured room order with local device names", () => {
+  const { definition } = loadFrontendModule();
+  const moduleInstance = Object.assign({}, definition, {
+    config: Object.assign({}, definition.defaults, {
+      roomOrder: ["Office", "Living Room"]
+    })
+  });
+  const devices = [
+    { deviceName: "Living Room - Right", powerState: false },
+    { deviceName: "Office - Work Right", powerState: true },
+    { deviceName: "Hallway", powerState: true },
+    { deviceName: "Office - Work Left", powerState: false }
+  ];
+
+  const groups = moduleInstance.buildCompactRoomGroups(devices);
+
+  assert.deepEqual(Array.from(groups, (group) => group.room), ["Office", "Living Room", "Unassigned"]);
+  assert.deepEqual(Array.from(groups[0].devices, (device) => device.deviceName), ["Office - Work Left", "Office - Work Right"]);
+  assert.equal(groups[0].on, 1);
+  assert.equal(groups[0].total, 2);
+  assert.equal(moduleInstance.getGroupedDeviceName(groups[0].devices[0], "Office"), "Work Left");
+  assert.equal(moduleInstance.getGroupedDeviceName(devices[2], "Unassigned"), "Hallway");
+});
+
+test("compact-card limits retain representation from each room", () => {
+  const { definition } = loadFrontendModule();
+  const moduleInstance = Object.assign({}, definition, {
+    config: Object.assign({}, definition.defaults, {
+      groupCompactCardsByRoom: true
+    })
+  });
+  const devices = [
+    { deviceName: "Bedroom - Left" },
+    { deviceName: "Bedroom - Right" },
+    { deviceName: "Kitchen - Left" },
+    { deviceName: "Kitchen - Right" },
+    { deviceName: "Office - Left" },
+    { deviceName: "Office - Right" }
+  ];
+
+  const selected = moduleInstance.selectCompactCardDevices(devices, 3);
+
+  assert.deepEqual(Array.from(selected, (device) => moduleInstance.inferRoomName(device)), ["Bedroom", "Kitchen", "Office"]);
+});
+
 test("Homebridge accessory API explains the insecure mode requirement", () => {
   const message = helper.getHomebridgeAccessoriesError(400, "Bad Request", {
     message: "Homebridge must be running in insecure mode to access accessories."
