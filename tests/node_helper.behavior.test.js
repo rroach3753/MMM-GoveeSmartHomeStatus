@@ -1,7 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
+const EventEmitter = require("node:events");
 const fs = require("node:fs");
+const https = require("node:https");
 const path = require("node:path");
 const vm = require("node:vm");
 
@@ -115,8 +117,9 @@ test("Homebridge power retries through discovery only after DNS failure", async 
   const attempts = [];
 
   helper.homebridgeFallbackUrls = {};
-  helper.fetchHomebridgePowerMapAtUrl = (url, username, password, callback) => {
+  helper.fetchHomebridgePowerMapAtUrl = (url, username, password, verifySSL, callback) => {
     attempts.push(url);
+    assert.equal(verifySSL, true);
     if (attempts.length === 1) {
       const error = new Error("getaddrinfo ENOTFOUND missing.example.com");
       error.code = "ENOTFOUND";
@@ -129,7 +132,7 @@ test("Homebridge power retries through discovery only after DNS failure", async 
 
   try {
     const powerMap = await new Promise((resolve, reject) => {
-      helper.fetchHomebridgePowerMap("https://missing.example.com:8581", "user", "password", (error, result) => {
+      helper.fetchHomebridgePowerMap("https://missing.example.com:8581", "user", "password", true, (error, result) => {
         if (error) {
           reject(error);
           return;
@@ -144,6 +147,45 @@ test("Homebridge power retries through discovery only after DNS failure", async 
     helper.fetchHomebridgePowerMapAtUrl = originalFetch;
     helper.discoverHomebridgeUrl = originalDiscover;
     helper.homebridgeFallbackUrls = {};
+  }
+});
+
+test("Homebridge authentication verifies TLS unless explicitly disabled", async () => {
+  const originalRequest = https.request;
+  const rejectUnauthorizedValues = [];
+
+  https.request = (options, responseCallback) => {
+    const request = new EventEmitter();
+    request.write = () => {};
+    request.end = () => {
+      const response = new EventEmitter();
+      response.statusCode = 200;
+      rejectUnauthorizedValues.push(options.rejectUnauthorized);
+      responseCallback(response);
+      response.emit("data", Buffer.from('{"access_token":"test-token","expires_in":600}'));
+      response.emit("end");
+    };
+    request.destroy = (error) => request.emit("error", error);
+    return request;
+  };
+
+  try {
+    for (const verifySSL of [true, false]) {
+      await new Promise((resolve, reject) => {
+        helper.authenticateHomebridge("https://homebridge.example:8581", "user", "password", verifySSL, (error, token) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          assert.equal(token, "test-token");
+          resolve();
+        });
+      });
+    }
+
+    assert.deepEqual(rejectUnauthorizedValues, [true, false]);
+  } finally {
+    https.request = originalRequest;
   }
 });
 
@@ -205,4 +247,31 @@ test("Homebridge power map retains zero watts and rejects invalid readings", () 
   assert.deepEqual(helper.buildHomebridgePowerMap(accessories), {
     "idle outlet": 0
   });
+});
+
+test("server Govee API key takes precedence over renderer config", () => {
+  const previousApiKey = process.env.GOVEE_API_KEY;
+  const originalFetch = helper.fetchCloudDevicesSegmented;
+  const originalSend = helper.sendDevicesData;
+  let receivedApiKey;
+
+  process.env.GOVEE_API_KEY = "server-key";
+  helper.fetchCloudDevicesSegmented = (apiKey, listInterval, stateInterval, callback) => {
+    receivedApiKey = apiKey;
+    callback(null, []);
+  };
+  helper.sendDevicesData = () => {};
+
+  try {
+    helper.fetchGoveeDevices({ apiKey: "renderer-key" });
+    assert.equal(receivedApiKey, "server-key");
+  } finally {
+    helper.fetchCloudDevicesSegmented = originalFetch;
+    helper.sendDevicesData = originalSend;
+    if (previousApiKey === undefined) {
+      delete process.env.GOVEE_API_KEY;
+    } else {
+      process.env.GOVEE_API_KEY = previousApiKey;
+    }
+  }
 });

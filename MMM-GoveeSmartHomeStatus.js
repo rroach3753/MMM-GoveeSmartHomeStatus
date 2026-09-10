@@ -33,6 +33,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     homebridgeUrl: "",
     homebridgeUsername: "",
     homebridgePassword: "",
+    homebridgeVerifySSL: true,
     showPowerConsumption: true
   },
 
@@ -68,7 +69,8 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       cloudDeviceStateRefreshInterval: this.config.cloudDeviceStateRefreshInterval,
       homebridgeUrl: this.config.homebridgeUrl,
       homebridgeUsername: this.config.homebridgeUsername,
-      homebridgePassword: this.config.homebridgePassword
+      homebridgePassword: this.config.homebridgePassword,
+      homebridgeVerifySSL: this.config.homebridgeVerifySSL
     });
 
     if (this.configRetryTimer) {

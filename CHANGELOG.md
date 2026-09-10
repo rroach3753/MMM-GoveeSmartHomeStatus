@@ -19,6 +19,10 @@
 ### Security
 
 - Updated the `brace-expansion` override to 5.0.9 to address a denial-of-service vulnerability
+- Updated the `smol-toml` override to 1.8.0 to address a development-tool denial-of-service vulnerability
+- Enabled Homebridge TLS certificate verification by default with an explicit `homebridgeVerifySSL` compatibility option
+- Limited Homebridge authentication and accessory responses to 1 MB
+- Added server-only environment variable support for Govee and Homebridge credentials
 
 ## [1.2.0] - 2026-07-24
 

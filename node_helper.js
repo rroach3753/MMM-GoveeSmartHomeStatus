@@ -10,6 +10,7 @@ const LAN_DISCOVERY_SEND_PORT = 4001;
 const LAN_DISCOVERY_LISTEN_PORT = 4002;
 const LAN_DEVICE_CONTROL_PORT = 4003;
 const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
+const MAX_RESPONSE_BYTES = 1048576;
 
 module.exports = NodeHelper.create({
   start: function () {
@@ -47,7 +48,7 @@ module.exports = NodeHelper.create({
   fetchGoveeDevices: function (requestOptions) {
     var self = this;
     var instanceId = requestOptions.instanceId || null;
-    var apiKey = requestOptions.apiKey;
+    var apiKey = process.env.GOVEE_API_KEY || requestOptions.apiKey;
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
     var lanDiscoveryTimeout = Number(requestOptions.lanDiscoveryTimeout) || 4000;
@@ -56,8 +57,9 @@ module.exports = NodeHelper.create({
     var cloudDeviceListRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceListRefreshInterval);
     var cloudDeviceStateRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceStateRefreshInterval);
     var homebridgeUrl = String(requestOptions.homebridgeUrl || "").trim();
-    var homebridgeUsername = String(requestOptions.homebridgeUsername || "").trim();
-    var homebridgePassword = String(requestOptions.homebridgePassword || "");
+    var homebridgeUsername = String(process.env.HOMEBRIDGE_USERNAME || requestOptions.homebridgeUsername || "").trim();
+    var homebridgePassword = String(process.env.HOMEBRIDGE_PASSWORD || requestOptions.homebridgePassword || "");
+    var homebridgeVerifySSL = this.normalizeBoolean(requestOptions.homebridgeVerifySSL, true);
     var hasHomebridge = !!(homebridgeUrl && homebridgeUsername);
 
     function finalSend(devices) {
@@ -65,7 +67,7 @@ module.exports = NodeHelper.create({
         self.sendDevicesData(devices, instanceId);
         return;
       }
-      self.withHomebridgePower(homebridgeUrl, homebridgeUsername, homebridgePassword, devices, function (enrichedDevices) {
+      self.withHomebridgePower(homebridgeUrl, homebridgeUsername, homebridgePassword, homebridgeVerifySSL, devices, function (enrichedDevices) {
         self.sendDevicesData(enrichedDevices, instanceId);
       });
     }
@@ -1113,10 +1115,10 @@ module.exports = NodeHelper.create({
     return fallbackValue;
   },
 
-  withHomebridgePower: function (url, username, password, devices, callback) {
+  withHomebridgePower: function (url, username, password, verifySSL, devices, callback) {
     var self = this;
 
-    this.fetchHomebridgePowerMap(url, username, password, function (error, powerMap) {
+    this.fetchHomebridgePowerMap(url, username, password, verifySSL, function (error, powerMap) {
       if (error || !powerMap) {
         if (error) {
           console.error("[MMM-GoveeSmartHomeStatus] Homebridge error:", error.message);
@@ -1129,16 +1131,16 @@ module.exports = NodeHelper.create({
     });
   },
 
-  fetchHomebridgePowerMap: function (url, username, password, callback) {
+  fetchHomebridgePowerMap: function (url, username, password, verifySSL, callback) {
     var self = this;
     var fallbackUrl = this.homebridgeFallbackUrls[url];
 
     if (fallbackUrl) {
-      this.fetchHomebridgePowerMapAtUrl(fallbackUrl, username, password, callback);
+      this.fetchHomebridgePowerMapAtUrl(fallbackUrl, username, password, verifySSL, callback);
       return;
     }
 
-    this.fetchHomebridgePowerMapAtUrl(url, username, password, function (error, powerMap) {
+    this.fetchHomebridgePowerMapAtUrl(url, username, password, verifySSL, function (error, powerMap) {
       if (!self.isHomebridgeDnsError(error)) {
         callback(error, powerMap);
         return;
@@ -1154,17 +1156,17 @@ module.exports = NodeHelper.create({
         self.homebridgeToken = null;
         self.homebridgeTokenExpiry = 0;
         console.warn("[MMM-GoveeSmartHomeStatus] Homebridge hostname could not resolve; using discovered endpoint " + discoveredUrl);
-        self.fetchHomebridgePowerMapAtUrl(discoveredUrl, username, password, callback);
+        self.fetchHomebridgePowerMapAtUrl(discoveredUrl, username, password, verifySSL, callback);
       });
     });
   },
 
-  fetchHomebridgePowerMapAtUrl: function (url, username, password, callback) {
+  fetchHomebridgePowerMapAtUrl: function (url, username, password, verifySSL, callback) {
     var self = this;
     var now = Date.now();
 
     function doFetch(token) {
-      self.fetchHomebridgeAccessories(url, token, callback);
+      self.fetchHomebridgeAccessories(url, token, verifySSL, callback);
     }
 
     if (this.homebridgeToken && now < this.homebridgeTokenExpiry) {
@@ -1172,7 +1174,7 @@ module.exports = NodeHelper.create({
       return;
     }
 
-    this.authenticateHomebridge(url, username, password, function (err, token, expiresAt) {
+    this.authenticateHomebridge(url, username, password, verifySSL, function (err, token, expiresAt) {
       if (err) {
         callback(err, null);
         return;
@@ -1239,7 +1241,7 @@ module.exports = NodeHelper.create({
     return (configured.isHttps ? "https://" : "http://") + address + ":" + configured.port;
   },
 
-  authenticateHomebridge: function (baseUrl, username, password, callback) {
+  authenticateHomebridge: function (baseUrl, username, password, verifySSL, callback) {
     var urlInfo = this.parseSimpleUrl(baseUrl);
     var isSettled = false;
     var body = JSON.stringify({ username: username, password: password, otp: "" });
@@ -1264,13 +1266,19 @@ module.exports = NodeHelper.create({
         "Content-Length": Buffer.byteLength(body)
       },
       timeout: 10000,
-      rejectUnauthorized: false
+      rejectUnauthorized: verifySSL !== false
     };
 
     var req = lib.request(options, function (res) {
       var data = "";
+      var bodyLength = 0;
 
       res.on("data", function (chunk) {
+        bodyLength += chunk.length;
+        if (bodyLength > MAX_RESPONSE_BYTES) {
+          req.destroy(new Error("Homebridge auth response body exceeded 1 MB limit"));
+          return;
+        }
         data += chunk;
       });
 
@@ -1303,7 +1311,7 @@ module.exports = NodeHelper.create({
     req.end();
   },
 
-  fetchHomebridgeAccessories: function (baseUrl, token, callback) {
+  fetchHomebridgeAccessories: function (baseUrl, token, verifySSL, callback) {
     var self = this;
     var urlInfo = this.parseSimpleUrl(baseUrl);
     var isSettled = false;
@@ -1328,13 +1336,19 @@ module.exports = NodeHelper.create({
         "Content-Type": "application/json"
       },
       timeout: 10000,
-      rejectUnauthorized: false
+      rejectUnauthorized: verifySSL !== false
     };
 
     var req = lib.request(options, function (res) {
       var data = "";
+      var bodyLength = 0;
 
       res.on("data", function (chunk) {
+        bodyLength += chunk.length;
+        if (bodyLength > MAX_RESPONSE_BYTES) {
+          req.destroy(new Error("Homebridge accessories response body exceeded 1 MB limit"));
+          return;
+        }
         data += chunk;
       });
 

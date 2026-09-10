@@ -209,7 +209,14 @@ Then restart MagicMirror.
 | `homebridgeUrl` | String | Homebridge config-ui-x base URL (e.g. `"http://192.168.1.50:8581"`). Leave empty to disable. | `""` |
 | `homebridgeUsername` | String | Homebridge UI username | `""` |
 | `homebridgePassword` | String | Homebridge UI password | `""` |
+| `homebridgeVerifySSL` | Boolean | Verify Homebridge HTTPS certificates | `true` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
+
+## Security
+
+Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment. Server-side values take precedence over configured values.
+
+Homebridge HTTPS certificates are verified by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. Use `homebridgeVerifySSL: false` only as a temporary fallback on a trusted local network because it permits interception of Homebridge credentials and access tokens.
 
 ## Usage Examples
 
@@ -390,6 +397,8 @@ Display live wattage on outlet device cards by connecting to the Homebridge REST
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 
 If the configured Homebridge hostname temporarily fails DNS resolution, the module automatically retries against a matching Homebridge web service discovered over Bonjour on the same port. The configured HTTP/HTTPS protocol and credentials are preserved.
+
+For HTTPS discovery, the discovered IP address must be covered by the Homebridge certificate when `homebridgeVerifySSL` is enabled.
 
 The module matches Homebridge accessories to Govee devices by device ID, with a case-insensitive device-name fallback. No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
 
