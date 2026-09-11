@@ -5,6 +5,7 @@
 ### Changed
 
 - Updated transitive development dependencies `@eslint/plugin-kit` to 0.7.3 and `fastq` to 1.20.3
+- Updated ESLint to 10.10.0
 
 ## [1.3.0] - 2026-09-09
 
