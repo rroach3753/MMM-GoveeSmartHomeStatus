@@ -76,6 +76,28 @@ test("frontend continues retrying after more than three connection failures", ()
   assert.ok(timers.has(moduleInstance.configRetryTimer));
 });
 
+test("frontend defaults Homebridge TLS verification off for self-signed local certificates", () => {
+  const { definition } = loadFrontendModule();
+  let requestPayload;
+  const moduleInstance = Object.assign({}, definition, {
+    config: Object.assign({}, definition.defaults, {
+      apiKey: "test-key",
+      homebridgeUrl: "https://homebridge.local:8581"
+    }),
+    identifier: "test-instance",
+    sendSocketNotification(notification, payload) {
+      if (notification === "GOVEE_DEVICES_REQUEST") {
+        requestPayload = payload;
+      }
+    },
+    updateDom() {}
+  });
+
+  moduleInstance.start();
+
+  assert.equal(requestPayload.homebridgeVerifySSL, false);
+});
+
 test("full-width bottom bar keeps wattage visible", () => {
   const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
   const hiddenDetailsIndex = css.indexOf(".full-width-bottom-bar .device-detail {");

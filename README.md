@@ -214,14 +214,14 @@ Then restart MagicMirror.
 | `homebridgeUrl` | String | Homebridge config-ui-x base URL (e.g. `"http://192.168.1.50:8581"`). Leave empty to disable. | `""` |
 | `homebridgeUsername` | String | Homebridge UI username | `""` |
 | `homebridgePassword` | String | Homebridge UI password | `""` |
-| `homebridgeVerifySSL` | Boolean | Verify Homebridge HTTPS certificates | `true` |
+| `homebridgeVerifySSL` | Boolean | Verify Homebridge HTTPS certificates | `false` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
 
 ## Security
 
 Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment. Server-side values take precedence over configured values.
 
-Homebridge HTTPS certificates are verified by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. Use `homebridgeVerifySSL: false` only as a temporary fallback on a trusted local network because it permits interception of Homebridge credentials and access tokens.
+Homebridge HTTPS certificate verification is disabled by default for compatibility with self-signed local installations. Set `homebridgeVerifySSL: true` when Homebridge uses a certificate trusted by the MagicMirror host. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. Disabling verification permits interception of Homebridge credentials and access tokens, so use this integration only on a trusted local network when verification is off.
 
 ## Usage Examples
 

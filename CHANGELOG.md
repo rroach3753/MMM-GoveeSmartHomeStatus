@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored Pro outlet power draw for Homebridge HTTPS installations using self-signed certificates by preserving the pre-1.3 TLS verification default
+
 ### Changed
 
 - Updated transitive development dependencies `@eslint/plugin-kit` to 0.7.3 and `fastq` to 1.20.3

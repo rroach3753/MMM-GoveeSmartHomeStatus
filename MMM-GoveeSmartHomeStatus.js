@@ -38,7 +38,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     homebridgeUrl: "",
     homebridgeUsername: "",
     homebridgePassword: "",
-    homebridgeVerifySSL: true,
+    homebridgeVerifySSL: false,
     showPowerConsumption: true
   },
 
