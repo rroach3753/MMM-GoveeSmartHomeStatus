@@ -322,6 +322,7 @@ test("Homebridge power map retains zero watts and rejects invalid readings", () 
 test("Homebridge outlet map retains writable On characteristic identifiers", () => {
   const accessories = [{
     aid: 4,
+    uniqueId: "outlet-service-id",
     accessoryInformation: { Name: "eBike - Pro" },
     serviceCharacteristics: [
       {
@@ -332,15 +333,27 @@ test("Homebridge outlet map retains writable On characteristic identifiers", () 
       {
         uuid: "00000025-0000-1000-8000-0026BB765291",
         iid: 9,
+        type: "On",
         serviceName: "Outlet Pro",
-        value: true
+        value: true,
+        canWrite: true
       }
     ]
   }];
 
   assert.deepEqual(helper.buildHomebridgeOutletMap(accessories), {
-    "ebike - pro": { watts: 4.3, isOn: true, aid: 4, iid: 9 },
-    "outlet pro": { watts: 4.3, isOn: true, aid: 4, iid: 9 }
+    "ebike - pro": {
+      watts: 4.3,
+      isOn: true,
+      uniqueId: "outlet-service-id",
+      characteristicType: "On"
+    },
+    "outlet pro": {
+      watts: 4.3,
+      isOn: true,
+      uniqueId: "outlet-service-id",
+      characteristicType: "On"
+    }
   });
 });
 
@@ -391,17 +404,17 @@ test("Homebridge characteristic writer sends outlet off command", async () => {
         "http://homebridge.local:8581",
         "test-token",
         false,
-        4,
-        9,
+        "outlet-service-id",
+        "On",
         false,
         (error) => error ? reject(error) : resolve()
       );
     });
 
     assert.equal(requestOptions.method, "PUT");
-    assert.equal(requestOptions.path, "/api/accessories/4/9");
+    assert.equal(requestOptions.path, "/api/accessories/outlet-service-id");
     assert.equal(requestOptions.headers.Authorization, "Bearer test-token");
-    assert.equal(requestBody, '{"value":false}');
+    assert.equal(requestBody, '{"characteristicType":"On","value":false}');
   } finally {
     http.request = originalRequest;
   }

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.1] - 2026-09-30
+
+### Fixed
+
+- Corrected Homebridge outlet control to use the config-ui-x service `uniqueId` and writable characteristic type required by the current REST API
+
 ## [1.4.0] - 2026-09-30
 
 ### Added

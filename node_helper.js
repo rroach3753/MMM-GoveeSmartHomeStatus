@@ -1251,8 +1251,8 @@ module.exports = NodeHelper.create({
           monitor.config.username,
           monitor.config.password,
           monitor.config.verifySSL,
-          outlet.aid,
-          outlet.iid,
+          outlet.uniqueId,
+          outlet.characteristicType,
           false,
           function (setError) {
             monitor.shuttingOff = false;
@@ -1692,27 +1692,23 @@ module.exports = NodeHelper.create({
         return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_ON_UUID;
       });
       var watts;
-      var aid;
-      var iid;
       var outlet;
       var names;
 
-      if (!consumptionCharacteristic || !onCharacteristic) {
+      if (!consumptionCharacteristic || !onCharacteristic || !accessory.uniqueId || !onCharacteristic.type) {
         return;
       }
 
       watts = Number(consumptionCharacteristic.value);
-      aid = Number(onCharacteristic.aid || accessory.aid);
-      iid = Number(onCharacteristic.iid);
-      if (!Number.isFinite(watts) || !Number.isInteger(aid) || !Number.isInteger(iid)) {
+      if (!Number.isFinite(watts) || onCharacteristic.canWrite === false) {
         return;
       }
 
       outlet = {
         watts: Math.round(watts * 10) / 10,
         isOn: this.normalizeBoolean(onCharacteristic.value, undefined),
-        aid: aid,
-        iid: iid
+        uniqueId: String(accessory.uniqueId),
+        characteristicType: String(onCharacteristic.type)
       };
       names = [
         accessory.accessoryInformation && accessory.accessoryInformation.Name,
@@ -1733,7 +1729,7 @@ module.exports = NodeHelper.create({
     return outletMap;
   },
 
-  setHomebridgeOutletState: function (url, username, password, verifySSL, aid, iid, value, callback) {
+  setHomebridgeOutletState: function (url, username, password, verifySSL, uniqueId, characteristicType, value, callback) {
     var self = this;
     var targetUrl = this.homebridgeFallbackUrls[url] || url;
 
@@ -1743,15 +1739,18 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      self.writeHomebridgeCharacteristic(targetUrl, token, verifySSL, aid, iid, value, callback);
+      self.writeHomebridgeCharacteristic(targetUrl, token, verifySSL, uniqueId, characteristicType, value, callback);
     });
   },
 
-  writeHomebridgeCharacteristic: function (baseUrl, token, verifySSL, aid, iid, value, callback) {
+  writeHomebridgeCharacteristic: function (baseUrl, token, verifySSL, uniqueId, characteristicType, value, callback) {
     var self = this;
     var urlInfo = this.parseSimpleUrl(baseUrl);
     var isSettled = false;
-    var body = JSON.stringify({ value: value });
+    var body = JSON.stringify({
+      characteristicType: characteristicType,
+      value: value
+    });
     var lib = urlInfo.isHttps ? https : http;
 
     function safeCallback(error) {
@@ -1766,7 +1765,7 @@ module.exports = NodeHelper.create({
     var options = {
       hostname: urlInfo.hostname,
       port: urlInfo.port,
-      path: "/api/accessories/" + encodeURIComponent(aid) + "/" + encodeURIComponent(iid),
+      path: "/api/accessories/" + encodeURIComponent(uniqueId),
       method: "PUT",
       headers: {
         "Authorization": "Bearer " + token,
