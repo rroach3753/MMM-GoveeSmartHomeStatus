@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const Module = require("node:module");
 const EventEmitter = require("node:events");
 const fs = require("node:fs");
+const http = require("node:http");
 const https = require("node:https");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -96,6 +97,8 @@ test("frontend defaults Homebridge TLS verification off for self-signed local ce
   moduleInstance.start();
 
   assert.equal(requestPayload.homebridgeVerifySSL, false);
+  assert.equal(requestPayload.homebridgeAutoOffEnabled, true);
+  assert.equal(requestPayload.homebridgeAutoOffDeviceName, "eBike - Pro");
 });
 
 test("full-width bottom bar keeps wattage visible", () => {
@@ -314,6 +317,94 @@ test("Homebridge power map retains zero watts and rejects invalid readings", () 
   assert.deepEqual(helper.buildHomebridgePowerMap(accessories), {
     "idle outlet": 0
   });
+});
+
+test("Homebridge outlet map retains writable On characteristic identifiers", () => {
+  const accessories = [{
+    aid: 4,
+    accessoryInformation: { Name: "eBike - Pro" },
+    serviceCharacteristics: [
+      {
+        uuid: "E863F10D-079E-48FF-8F27-9C2605A29F52",
+        serviceName: "Outlet Pro",
+        value: "4.25"
+      },
+      {
+        uuid: "00000025-0000-1000-8000-0026BB765291",
+        iid: 9,
+        serviceName: "Outlet Pro",
+        value: true
+      }
+    ]
+  }];
+
+  assert.deepEqual(helper.buildHomebridgeOutletMap(accessories), {
+    "ebike - pro": { watts: 4.3, isOn: true, aid: 4, iid: 9 },
+    "outlet pro": { watts: 4.3, isOn: true, aid: 4, iid: 9 }
+  });
+});
+
+test("Homebridge auto-off requires charging and sustained power below threshold", () => {
+  const monitor = {
+    config: {
+      thresholdWatts: 5,
+      armWatts: 20,
+      belowDuration: 300000
+    },
+    armed: false,
+    belowSince: null
+  };
+
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 3, isOn: true }, 1000), false);
+  assert.equal(monitor.armed, false);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 25, isOn: true }, 2000), false);
+  assert.equal(monitor.armed, true);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 3000), false);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 302999), false);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 303000), true);
+});
+
+test("Homebridge characteristic writer sends outlet off command", async () => {
+  const originalRequest = http.request;
+  let requestOptions;
+  let requestBody;
+
+  http.request = (options, responseCallback) => {
+    const request = new EventEmitter();
+    request.write = (body) => {
+      requestBody = body;
+    };
+    request.end = () => {
+      const response = new EventEmitter();
+      response.statusCode = 200;
+      responseCallback(response);
+      response.emit("end");
+    };
+    request.destroy = (error) => request.emit("error", error);
+    requestOptions = options;
+    return request;
+  };
+
+  try {
+    await new Promise((resolve, reject) => {
+      helper.writeHomebridgeCharacteristic(
+        "http://homebridge.local:8581",
+        "test-token",
+        false,
+        4,
+        9,
+        false,
+        (error) => error ? reject(error) : resolve()
+      );
+    });
+
+    assert.equal(requestOptions.method, "PUT");
+    assert.equal(requestOptions.path, "/api/accessories/4/9");
+    assert.equal(requestOptions.headers.Authorization, "Bearer test-token");
+    assert.equal(requestBody, '{"value":false}');
+  } finally {
+    http.request = originalRequest;
+  }
 });
 
 test("server Govee API key takes precedence over renderer config", () => {

@@ -11,6 +11,8 @@ const LAN_DISCOVERY_LISTEN_PORT = 4002;
 const LAN_DEVICE_CONTROL_PORT = 4003;
 const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
 const MAX_RESPONSE_BYTES = 1048576;
+const HOMEBRIDGE_ON_UUID = "00000025-0000-1000-8000-0026BB765291";
+const HOMEBRIDGE_CURRENT_CONSUMPTION_UUID = "E863F10D-079E-48FF-8F27-9C2605A29F52";
 
 module.exports = NodeHelper.create({
   start: function () {
@@ -23,6 +25,7 @@ module.exports = NodeHelper.create({
     this.homebridgeToken = null;
     this.homebridgeTokenExpiry = 0;
     this.homebridgeFallbackUrls = {};
+    this.homebridgeAutoOffMonitors = {};
   },
 
   sendDevicesData: function (devices, instanceId) {
@@ -61,6 +64,19 @@ module.exports = NodeHelper.create({
     var homebridgePassword = String(process.env.HOMEBRIDGE_PASSWORD || requestOptions.homebridgePassword || "");
     var homebridgeVerifySSL = this.normalizeBoolean(requestOptions.homebridgeVerifySSL, true);
     var hasHomebridge = !!(homebridgeUrl && homebridgeUsername);
+
+    this.configureHomebridgeAutoOff(instanceId, hasHomebridge ? {
+      url: homebridgeUrl,
+      username: homebridgeUsername,
+      password: homebridgePassword,
+      verifySSL: homebridgeVerifySSL,
+      enabled: this.normalizeBoolean(requestOptions.homebridgeAutoOffEnabled, true),
+      deviceName: String(requestOptions.homebridgeAutoOffDeviceName || "eBike - Pro").trim(),
+      thresholdWatts: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffThresholdWatts, 5),
+      armWatts: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffArmWatts, 20),
+      belowDuration: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffBelowDuration, 300000),
+      pollInterval: Math.max(5000, this.normalizePositiveNumber(requestOptions.homebridgeAutoOffPollInterval, 30000))
+    } : null);
 
     function finalSend(devices) {
       if (!hasHomebridge) {
@@ -1115,6 +1131,173 @@ module.exports = NodeHelper.create({
     return fallbackValue;
   },
 
+  normalizePositiveNumber: function (value, fallbackValue) {
+    var numericValue = Number(value);
+
+    return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallbackValue;
+  },
+
+  configureHomebridgeAutoOff: function (instanceId, config) {
+    var self = this;
+    var monitorId = String(instanceId || "__default");
+    var existing;
+    var configKey;
+
+    if (!this.homebridgeAutoOffMonitors) {
+      this.homebridgeAutoOffMonitors = {};
+    }
+    existing = this.homebridgeAutoOffMonitors[monitorId];
+
+    if (!config || !config.enabled || !config.deviceName) {
+      if (existing && existing.timer) {
+        clearTimeout(existing.timer);
+      }
+      delete this.homebridgeAutoOffMonitors[monitorId];
+      return;
+    }
+
+    configKey = [
+      config.url,
+      config.username,
+      config.password,
+      config.verifySSL,
+      config.deviceName.toLowerCase(),
+      config.thresholdWatts,
+      config.armWatts,
+      config.belowDuration,
+      config.pollInterval
+    ].join("\n");
+
+    if (existing && existing.configKey === configKey) {
+      return;
+    }
+
+    if (existing && existing.timer) {
+      clearTimeout(existing.timer);
+    }
+
+    this.homebridgeAutoOffMonitors[monitorId] = {
+      config: config,
+      configKey: configKey,
+      armed: false,
+      belowSince: null,
+      shuttingOff: false,
+      timer: null
+    };
+
+    this.homebridgeAutoOffMonitors[monitorId].timer = setTimeout(function () {
+      self.pollHomebridgeAutoOff(monitorId);
+    }, config.pollInterval);
+
+    if (this.homebridgeAutoOffMonitors[monitorId].timer.unref) {
+      this.homebridgeAutoOffMonitors[monitorId].timer.unref();
+    }
+  },
+
+  scheduleHomebridgeAutoOffPoll: function (monitorId) {
+    var self = this;
+    var monitor = this.homebridgeAutoOffMonitors[monitorId];
+
+    if (!monitor) {
+      return;
+    }
+
+    monitor.timer = setTimeout(function () {
+      self.pollHomebridgeAutoOff(monitorId);
+    }, monitor.config.pollInterval);
+
+    if (monitor.timer.unref) {
+      monitor.timer.unref();
+    }
+  },
+
+  pollHomebridgeAutoOff: function (monitorId) {
+    var self = this;
+    var monitor = this.homebridgeAutoOffMonitors[monitorId];
+
+    if (!monitor || monitor.shuttingOff) {
+      return;
+    }
+
+    monitor.timer = null;
+    this.fetchHomebridgeOutletMap(
+      monitor.config.url,
+      monitor.config.username,
+      monitor.config.password,
+      monitor.config.verifySSL,
+      function (error, outletMap) {
+        var currentMonitor = self.homebridgeAutoOffMonitors[monitorId];
+        var outlet;
+
+        if (!currentMonitor || currentMonitor !== monitor) {
+          return;
+        }
+
+        if (error) {
+          console.error("[MMM-GoveeSmartHomeStatus] Homebridge auto-off monitor error:", error.message);
+          self.scheduleHomebridgeAutoOffPoll(monitorId);
+          return;
+        }
+
+        outlet = outletMap[String(monitor.config.deviceName).toLowerCase()];
+        if (!outlet || !self.processHomebridgeAutoOffReading(monitor, outlet, Date.now())) {
+          self.scheduleHomebridgeAutoOffPoll(monitorId);
+          return;
+        }
+
+        monitor.shuttingOff = true;
+        self.setHomebridgeOutletState(
+          monitor.config.url,
+          monitor.config.username,
+          monitor.config.password,
+          monitor.config.verifySSL,
+          outlet.aid,
+          outlet.iid,
+          false,
+          function (setError) {
+            monitor.shuttingOff = false;
+
+            if (setError) {
+              console.error("[MMM-GoveeSmartHomeStatus] Failed to turn off " + monitor.config.deviceName + ":", setError.message);
+            } else {
+              monitor.armed = false;
+              monitor.belowSince = null;
+              console.log("[MMM-GoveeSmartHomeStatus] Turned off " + monitor.config.deviceName + " after sustained low power");
+            }
+
+            self.scheduleHomebridgeAutoOffPoll(monitorId);
+          }
+        );
+      }
+    );
+  },
+
+  processHomebridgeAutoOffReading: function (monitor, outlet, now) {
+    if (!outlet || outlet.isOn === false || !Number.isFinite(outlet.watts)) {
+      monitor.armed = false;
+      monitor.belowSince = null;
+      return false;
+    }
+
+    if (outlet.watts >= monitor.config.armWatts) {
+      monitor.armed = true;
+      monitor.belowSince = null;
+      return false;
+    }
+
+    if (!monitor.armed || outlet.watts >= monitor.config.thresholdWatts) {
+      monitor.belowSince = null;
+      return false;
+    }
+
+    if (monitor.belowSince === null) {
+      monitor.belowSince = now;
+      return false;
+    }
+
+    return now - monitor.belowSince >= monitor.config.belowDuration;
+  },
+
   withHomebridgePower: function (url, username, password, verifySSL, devices, callback) {
     var self = this;
 
@@ -1163,26 +1346,78 @@ module.exports = NodeHelper.create({
 
   fetchHomebridgePowerMapAtUrl: function (url, username, password, verifySSL, callback) {
     var self = this;
-    var now = Date.now();
 
-    function doFetch(token) {
+    this.withHomebridgeToken(url, username, password, verifySSL, function (error, token) {
+      if (error) {
+        callback(error, null);
+        return;
+      }
+
       self.fetchHomebridgeAccessories(url, token, verifySSL, callback);
+    });
+  },
+
+  fetchHomebridgeOutletMap: function (url, username, password, verifySSL, callback) {
+    var self = this;
+    var fallbackUrl = this.homebridgeFallbackUrls[url];
+
+    function fetchAtUrl(targetUrl, done) {
+      self.withHomebridgeToken(targetUrl, username, password, verifySSL, function (tokenError, token) {
+        if (tokenError) {
+          done(tokenError, null);
+          return;
+        }
+
+        self.fetchHomebridgeAccessories(targetUrl, token, verifySSL, done, function (accessories) {
+          return self.buildHomebridgeOutletMap(accessories);
+        });
+      });
     }
 
-    if (this.homebridgeToken && now < this.homebridgeTokenExpiry) {
-      doFetch(this.homebridgeToken);
+    if (fallbackUrl) {
+      fetchAtUrl(fallbackUrl, callback);
       return;
     }
 
-    this.authenticateHomebridge(url, username, password, verifySSL, function (err, token, expiresAt) {
-      if (err) {
-        callback(err, null);
+    fetchAtUrl(url, function (error, outletMap) {
+      if (!self.isHomebridgeDnsError(error)) {
+        callback(error, outletMap);
+        return;
+      }
+
+      self.discoverHomebridgeUrl(url, function (discoveryError, discoveredUrl) {
+        if (discoveryError || !discoveredUrl) {
+          callback(error, null);
+          return;
+        }
+
+        self.homebridgeFallbackUrls[url] = discoveredUrl;
+        self.homebridgeToken = null;
+        self.homebridgeTokenExpiry = 0;
+        console.warn("[MMM-GoveeSmartHomeStatus] Homebridge hostname could not resolve; using discovered endpoint " + discoveredUrl);
+        fetchAtUrl(discoveredUrl, callback);
+      });
+    });
+  },
+
+  withHomebridgeToken: function (url, username, password, verifySSL, callback) {
+    var self = this;
+    var now = Date.now();
+
+    if (this.homebridgeToken && now < this.homebridgeTokenExpiry) {
+      callback(null, this.homebridgeToken);
+      return;
+    }
+
+    this.authenticateHomebridge(url, username, password, verifySSL, function (error, token, expiresAt) {
+      if (error) {
+        callback(error, null);
         return;
       }
 
       self.homebridgeToken = token;
       self.homebridgeTokenExpiry = expiresAt;
-      doFetch(token);
+      callback(null, token);
     });
   },
 
@@ -1311,7 +1546,7 @@ module.exports = NodeHelper.create({
     req.end();
   },
 
-  fetchHomebridgeAccessories: function (baseUrl, token, verifySSL, callback) {
+  fetchHomebridgeAccessories: function (baseUrl, token, verifySSL, callback, resultMapper) {
     var self = this;
     var urlInfo = this.parseSimpleUrl(baseUrl);
     var isSettled = false;
@@ -1368,7 +1603,7 @@ module.exports = NodeHelper.create({
             return;
           }
 
-          safeCallback(null, self.buildHomebridgePowerMap(accessories));
+          safeCallback(null, resultMapper ? resultMapper(accessories) : self.buildHomebridgePowerMap(accessories));
         } catch (e) {
           safeCallback(new Error("Failed to parse Homebridge accessories: " + e.message));
         }
@@ -1404,7 +1639,6 @@ module.exports = NodeHelper.create({
   },
 
   buildHomebridgePowerMap: function (accessories) {
-    var consumptionUuid = "E863F10D-079E-48FF-8F27-9C2605A29F52";
     var powerMap = {};
 
     (Array.isArray(accessories) ? accessories : []).forEach(function (accessory) {
@@ -1412,7 +1646,7 @@ module.exports = NodeHelper.create({
         ? accessory.serviceCharacteristics
         : [];
       var consumptionCharacteristic = characteristics.find(function (characteristic) {
-        return characteristic && String(characteristic.uuid || "").toUpperCase() === consumptionUuid;
+        return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_CURRENT_CONSUMPTION_UUID;
       });
       var numericValue;
       var names;
@@ -1442,6 +1676,146 @@ module.exports = NodeHelper.create({
     });
 
     return powerMap;
+  },
+
+  buildHomebridgeOutletMap: function (accessories) {
+    var outletMap = {};
+
+    (Array.isArray(accessories) ? accessories : []).forEach(function (accessory) {
+      var characteristics = Array.isArray(accessory.serviceCharacteristics)
+        ? accessory.serviceCharacteristics
+        : [];
+      var consumptionCharacteristic = characteristics.find(function (characteristic) {
+        return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_CURRENT_CONSUMPTION_UUID;
+      });
+      var onCharacteristic = characteristics.find(function (characteristic) {
+        return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_ON_UUID;
+      });
+      var watts;
+      var aid;
+      var iid;
+      var outlet;
+      var names;
+
+      if (!consumptionCharacteristic || !onCharacteristic) {
+        return;
+      }
+
+      watts = Number(consumptionCharacteristic.value);
+      aid = Number(onCharacteristic.aid || accessory.aid);
+      iid = Number(onCharacteristic.iid);
+      if (!Number.isFinite(watts) || !Number.isInteger(aid) || !Number.isInteger(iid)) {
+        return;
+      }
+
+      outlet = {
+        watts: Math.round(watts * 10) / 10,
+        isOn: this.normalizeBoolean(onCharacteristic.value, undefined),
+        aid: aid,
+        iid: iid
+      };
+      names = [
+        accessory.accessoryInformation && accessory.accessoryInformation.Name,
+        accessory.accessoryInformation && accessory.accessoryInformation["Serial Number"],
+        consumptionCharacteristic.serviceName,
+        onCharacteristic.serviceName
+      ];
+
+      names.forEach(function (name) {
+        var normalizedName = String(name || "").trim().toLowerCase();
+
+        if (normalizedName) {
+          outletMap[normalizedName] = outlet;
+        }
+      });
+    }.bind(this));
+
+    return outletMap;
+  },
+
+  setHomebridgeOutletState: function (url, username, password, verifySSL, aid, iid, value, callback) {
+    var self = this;
+    var targetUrl = this.homebridgeFallbackUrls[url] || url;
+
+    this.withHomebridgeToken(targetUrl, username, password, verifySSL, function (error, token) {
+      if (error) {
+        callback(error);
+        return;
+      }
+
+      self.writeHomebridgeCharacteristic(targetUrl, token, verifySSL, aid, iid, value, callback);
+    });
+  },
+
+  writeHomebridgeCharacteristic: function (baseUrl, token, verifySSL, aid, iid, value, callback) {
+    var self = this;
+    var urlInfo = this.parseSimpleUrl(baseUrl);
+    var isSettled = false;
+    var body = JSON.stringify({ value: value });
+    var lib = urlInfo.isHttps ? https : http;
+
+    function safeCallback(error) {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      callback(error);
+    }
+
+    var options = {
+      hostname: urlInfo.hostname,
+      port: urlInfo.port,
+      path: "/api/accessories/" + encodeURIComponent(aid) + "/" + encodeURIComponent(iid),
+      method: "PUT",
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
+      },
+      timeout: 10000,
+      rejectUnauthorized: verifySSL !== false
+    };
+
+    var req = lib.request(options, function (res) {
+      var responseBody = "";
+      var bodyLength = 0;
+
+      res.on("data", function (chunk) {
+        bodyLength += chunk.length;
+        if (bodyLength > MAX_RESPONSE_BYTES) {
+          req.destroy(new Error("Homebridge characteristic response body exceeded 1 MB limit"));
+          return;
+        }
+        responseBody += chunk;
+      });
+
+      res.on("end", function () {
+        if (res.statusCode === 401) {
+          self.homebridgeToken = null;
+          self.homebridgeTokenExpiry = 0;
+        }
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          safeCallback(new Error("Homebridge characteristic HTTP " + res.statusCode + ": " + (responseBody || res.statusMessage || "Unknown error")));
+          return;
+        }
+
+        safeCallback(null);
+      });
+    });
+
+    req.on("timeout", function () {
+      req.destroy();
+      safeCallback(new Error("Homebridge characteristic request timed out"));
+    });
+
+    req.on("error", function (error) {
+      safeCallback(new Error("Homebridge characteristic error: " + error.message));
+    });
+
+    req.write(body);
+    req.end();
   },
 
   applyHomebridgePower: function (devices, powerMap) {

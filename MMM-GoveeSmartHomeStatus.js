@@ -39,7 +39,13 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     homebridgeUsername: "",
     homebridgePassword: "",
     homebridgeVerifySSL: false,
-    showPowerConsumption: true
+    showPowerConsumption: true,
+    homebridgeAutoOffEnabled: true,
+    homebridgeAutoOffDeviceName: "eBike - Pro",
+    homebridgeAutoOffThresholdWatts: 5,
+    homebridgeAutoOffArmWatts: 20,
+    homebridgeAutoOffBelowDuration: 300000,
+    homebridgeAutoOffPollInterval: 30000
   },
 
   start: function () {
@@ -75,7 +81,13 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       homebridgeUrl: this.config.homebridgeUrl,
       homebridgeUsername: this.config.homebridgeUsername,
       homebridgePassword: this.config.homebridgePassword,
-      homebridgeVerifySSL: this.config.homebridgeVerifySSL
+      homebridgeVerifySSL: this.config.homebridgeVerifySSL,
+      homebridgeAutoOffEnabled: this.config.homebridgeAutoOffEnabled,
+      homebridgeAutoOffDeviceName: this.config.homebridgeAutoOffDeviceName,
+      homebridgeAutoOffThresholdWatts: this.config.homebridgeAutoOffThresholdWatts,
+      homebridgeAutoOffArmWatts: this.config.homebridgeAutoOffArmWatts,
+      homebridgeAutoOffBelowDuration: this.config.homebridgeAutoOffBelowDuration,
+      homebridgeAutoOffPollInterval: this.config.homebridgeAutoOffPollInterval
     });
 
     if (this.configRetryTimer) {

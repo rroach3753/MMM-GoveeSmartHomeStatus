@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [1.4.0] - 2026-09-30
+
+### Added
+
+- Added a default-enabled Homebridge auto-off monitor for `eBike - Pro` that uses independent local polling and turns the outlet off after power remains below 5W for five minutes
 
 ### Fixed
 

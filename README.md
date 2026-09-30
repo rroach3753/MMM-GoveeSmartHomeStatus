@@ -216,6 +216,12 @@ Then restart MagicMirror.
 | `homebridgePassword` | String | Homebridge UI password | `""` |
 | `homebridgeVerifySSL` | Boolean | Verify Homebridge HTTPS certificates | `false` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
+| `homebridgeAutoOffEnabled` | Boolean | Monitor the configured Homebridge outlet locally and turn it off after sustained low power | `true` |
+| `homebridgeAutoOffDeviceName` | String | Exact Homebridge accessory, service, or Govee device name to monitor (case-insensitive) | `"eBike - Pro"` |
+| `homebridgeAutoOffThresholdWatts` | Number | Turn-off threshold in watts; readings must be strictly below this value | `5` |
+| `homebridgeAutoOffArmWatts` | Number | Wattage that must be observed before low-power shutoff is armed | `20` |
+| `homebridgeAutoOffBelowDuration` | Number | Time in milliseconds that power must remain below the threshold | `300000` |
+| `homebridgeAutoOffPollInterval` | Number | Local Homebridge polling interval in milliseconds; does not use the Govee OpenAPI | `30000` |
 
 ## Security
 
@@ -408,6 +414,8 @@ Set `groupCompactCardsByRoom: false` to restore the original flat compact-card g
 
 Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value on each refresh.
 
+By default, the module also monitors the Homebridge outlet named `eBike - Pro` every 30 seconds. After observing at least 20W, it turns the outlet off when consumption remains below 5W for five minutes. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. Set `homebridgeAutoOffEnabled: false` to disable the automation.
+
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 
 If the configured Homebridge hostname temporarily fails DNS resolution, the module automatically retries against a matching Homebridge web service discovered over Bonjour on the same port. The configured HTTP/HTTPS protocol and credentials are preserved.
@@ -425,7 +433,8 @@ The module matches Homebridge accessories to Govee devices by device ID, with a 
       homebridgeUrl: "http://192.168.1.50:8581",
       homebridgeUsername: "admin",
       homebridgePassword: "yourpassword",
-      showPowerConsumption: true
+      showPowerConsumption: true,
+      homebridgeAutoOffEnabled: true
    }
 },
 ```
