@@ -152,7 +152,7 @@ test("grouped bottom bar fits room cards within the available width", () => {
   assert.doesNotMatch(listRule[1], /width: max-content;/);
   assert.ok(roomRule);
   assert.match(roomRule[1], /grid-template-rows: repeat\(2,/);
-  assert.match(roomRule[1], /grid-auto-columns: clamp\(42px, 3\.2vw, 64px\);/);
+  assert.match(roomRule[1], /grid-auto-columns: clamp\(54px, 4vw, 80px\);/);
 });
 
 test("compact cards group by configured room order with local device names", () => {
