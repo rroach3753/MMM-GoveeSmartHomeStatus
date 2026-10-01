@@ -77,7 +77,7 @@ test("frontend continues retrying after more than three connection failures", ()
   assert.ok(timers.has(moduleInstance.configRetryTimer));
 });
 
-test("frontend defaults Homebridge TLS verification off for self-signed local certificates", () => {
+test("frontend defaults Homebridge TLS verification on while preserving auto-off defaults", () => {
   const { definition } = loadFrontendModule();
   let requestPayload;
   const moduleInstance = Object.assign({}, definition, {
@@ -96,7 +96,7 @@ test("frontend defaults Homebridge TLS verification off for self-signed local ce
 
   moduleInstance.start();
 
-  assert.equal(requestPayload.homebridgeVerifySSL, false);
+  assert.equal(requestPayload.homebridgeVerifySSL, true);
   assert.equal(requestPayload.homebridgeAutoOffEnabled, true);
   assert.equal(requestPayload.homebridgeAutoOffDeviceName, "eBike - Pro");
 });
@@ -280,6 +280,110 @@ test("server Homebridge credentials require a trusted server URL", () => {
         process.env[name] = value;
       }
     });
+  }
+});
+
+test("renderer Homebridge origins require an exact server allowlist match", () => {
+  const previousValues = {
+    HOMEBRIDGE_URL: process.env.HOMEBRIDGE_URL,
+    HOMEBRIDGE_USERNAME: process.env.HOMEBRIDGE_USERNAME,
+    HOMEBRIDGE_PASSWORD: process.env.HOMEBRIDGE_PASSWORD,
+    HOMEBRIDGE_ALLOWED_ORIGINS: process.env.HOMEBRIDGE_ALLOWED_ORIGINS
+  };
+  delete process.env.HOMEBRIDGE_URL;
+  delete process.env.HOMEBRIDGE_USERNAME;
+  delete process.env.HOMEBRIDGE_PASSWORD;
+  delete process.env.HOMEBRIDGE_ALLOWED_ORIGINS;
+
+  try {
+    const metadataConfig = helper.resolveHomebridgeConfig({
+      homebridgeUrl: "http://169.254.169.254",
+      homebridgeUsername: "renderer-user"
+    });
+    assert.match(metadataConfig.error, /must exactly match/);
+    assert.equal(metadataConfig.url, "");
+
+    process.env.HOMEBRIDGE_ALLOWED_ORIGINS = "http://127.0.0.1:8581, https://Homebridge.Local:8581/";
+    const loopbackConfig = helper.resolveHomebridgeConfig({
+      homebridgeUrl: "http://127.0.0.1:8581",
+      homebridgeUsername: "renderer-user"
+    });
+    assert.equal(loopbackConfig.url, "http://127.0.0.1:8581");
+    assert.equal(loopbackConfig.error, null);
+
+    const localConfig = helper.resolveHomebridgeConfig({
+      homebridgeUrl: "https://homebridge.local:8581",
+      homebridgeUsername: "renderer-user",
+      homebridgePassword: "renderer-password"
+    });
+    assert.deepEqual(localConfig, {
+      url: "https://homebridge.local:8581",
+      username: "renderer-user",
+      password: "renderer-password",
+      allowDiscovery: false,
+      error: null
+    });
+
+    const pathConfig = helper.resolveHomebridgeConfig({
+      homebridgeUrl: "https://homebridge.local:8581/admin",
+      homebridgeUsername: "renderer-user"
+    });
+    assert.match(pathConfig.error, /without a path/);
+  } finally {
+    Object.entries(previousValues).forEach(([name, value]) => {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    });
+  }
+});
+
+test("Homebridge token cache is isolated by canonical origin and username", async () => {
+  const originalAuthenticate = helper.authenticateHomebridge;
+  const authenticationCalls = [];
+  helper.homebridgeTokenCache = new Map();
+  helper.authenticateHomebridge = (url, username, password, verifySSL, callback) => {
+    authenticationCalls.push({ url, username });
+    callback(null, url + "::" + username, Date.now() + 60000);
+  };
+
+  function getToken(url, username) {
+    return new Promise((resolve, reject) => {
+      helper.withHomebridgeToken(url, username, "password", true, (error, token) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(token);
+      });
+    });
+  }
+
+  try {
+    const firstToken = await getToken("https://Homebridge.Example:443/", "alice");
+    const canonicalToken = await getToken("https://homebridge.example", "alice");
+    const secondUserToken = await getToken("https://homebridge.example", "bob");
+    const secondOriginToken = await getToken("https://other.example", "alice");
+
+    assert.equal(firstToken, canonicalToken);
+    assert.notEqual(firstToken, secondUserToken);
+    assert.notEqual(firstToken, secondOriginToken);
+    assert.equal(authenticationCalls.length, 3);
+
+    const firstCacheKey = helper.getHomebridgeTokenCacheKey("https://homebridge.example", "alice");
+    helper.homebridgeTokenCache.get(firstCacheKey).expiresAt = Date.now() - 1;
+    const refreshedToken = await getToken("https://homebridge.example", "alice");
+    assert.equal(authenticationCalls.length, 4);
+
+    helper.invalidateHomebridgeToken("https://homebridge.example", "alice", refreshedToken);
+    assert.equal(helper.homebridgeTokenCache.size, 2);
+    assert.ok(helper.homebridgeTokenCache.has(helper.getHomebridgeTokenCacheKey("https://homebridge.example", "bob")));
+    assert.ok(helper.homebridgeTokenCache.has(helper.getHomebridgeTokenCacheKey("https://other.example", "alice")));
+  } finally {
+    helper.authenticateHomebridge = originalAuthenticate;
+    helper.homebridgeTokenCache = new Map();
   }
 });
 
@@ -546,5 +650,66 @@ test("server Govee API key takes precedence over renderer config", () => {
     } else {
       process.env.GOVEE_API_KEY = previousApiKey;
     }
+  }
+});
+
+test("Govee cloud caches remain isolated when different API key requests race", async () => {
+  const originalFetchList = helper.fetchCloudDeviceList;
+  const originalFetchStates = helper.fetchDeviceStates;
+  const listCallbacks = new Map();
+  helper.cloudCaches = new Map();
+  helper.fetchCloudDeviceList = (apiKey, callback) => {
+    listCallbacks.set(apiKey, callback);
+  };
+  helper.fetchDeviceStates = (apiKey, devices, callback) => {
+    callback(devices.map((device) => Object.assign({}, device, {
+      apiKey,
+      powerState: apiKey === "key-b"
+    })));
+  };
+
+  function fetchForKey(apiKey) {
+    return new Promise((resolve, reject) => {
+      helper.fetchCloudDevicesSegmented(apiKey, 60000, 60000, (error, devices) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(devices);
+      });
+    });
+  }
+
+  try {
+    const keyAResult = fetchForKey("key-a");
+    const keyBResult = fetchForKey("key-b");
+
+    listCallbacks.get("key-b")(null, [{ deviceId: "device-b" }]);
+    listCallbacks.get("key-a")(null, [{ deviceId: "device-a" }]);
+
+    assert.deepEqual(await keyBResult, [{
+      deviceId: "device-b",
+      apiKey: "key-b",
+      powerState: true
+    }]);
+    assert.deepEqual(await keyAResult, [{
+      deviceId: "device-a",
+      apiKey: "key-a",
+      powerState: false
+    }]);
+    assert.deepEqual(helper.getCloudCache("key-a").enrichedDevices, [{
+      deviceId: "device-a",
+      apiKey: "key-a",
+      powerState: false
+    }]);
+    assert.deepEqual(helper.getCloudCache("key-b").enrichedDevices, [{
+      deviceId: "device-b",
+      apiKey: "key-b",
+      powerState: true
+    }]);
+  } finally {
+    helper.fetchCloudDeviceList = originalFetchList;
+    helper.fetchDeviceStates = originalFetchStates;
+    helper.cloudCaches = new Map();
   }
 });

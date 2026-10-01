@@ -211,10 +211,10 @@ Then restart MagicMirror.
 | `noApiKeyMessage` | String | Message when API key not configured | `"API key not configured."` |
 | `errorMessage` | String | Error message | `"Error fetching Govee device data."` |
 | `fullWidthBottomBar` | Boolean | Span full width of bottom_bar position | `false` |
-| `homebridgeUrl` | String | Homebridge config-ui-x base URL (e.g. `"http://192.168.1.50:8581"`). Leave empty to disable. | `""` |
+| `homebridgeUrl` | String | Homebridge config-ui-x HTTP(S) origin. It must exactly match server-side `HOMEBRIDGE_URL` or an entry in `HOMEBRIDGE_ALLOWED_ORIGINS`. Leave empty to disable. | `""` |
 | `homebridgeUsername` | String | Homebridge UI username | `""` |
 | `homebridgePassword` | String | Homebridge UI password | `""` |
-| `homebridgeVerifySSL` | Boolean | Verify Homebridge HTTPS certificates | `false` |
+| `homebridgeVerifySSL` | Boolean | Verify Homebridge HTTPS certificates. Set to `false` only as an explicit opt-out for a trusted self-signed installation. | `true` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
 | `homebridgeAutoOffEnabled` | Boolean | Monitor the configured Homebridge outlet locally and turn it off after sustained low power | `true` |
 | `homebridgeAutoOffDeviceName` | String | Exact Homebridge accessory, service, or Govee device name to monitor (case-insensitive) | `"eBike - Pro"` |
@@ -225,9 +225,11 @@ Then restart MagicMirror.
 
 ## Security
 
-Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment. `HOMEBRIDGE_URL` must be an HTTP(S) origin without a path, query, or embedded credentials and is required when server-side Homebridge credentials are used. Server-side values take precedence over configured values, and renderer-provided Homebridge origins are ignored when server credentials are configured.
+Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment. `HOMEBRIDGE_URL` must be an HTTP(S) origin without a path, query, fragment, or embedded credentials and is required when server-side Homebridge credentials are used. Server-side values take precedence over configured values, and renderer-provided Homebridge origins are ignored when server credentials are configured.
 
-Homebridge HTTPS certificate verification is disabled by default for compatibility with self-signed local installations. Set `homebridgeVerifySSL: true` when Homebridge uses a certificate trusted by the MagicMirror host. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. Disabling verification permits interception of Homebridge credentials and access tokens, so use this integration only on a trusted local network when verification is off.
+Renderer-provided URLs are not trusted network destinations. If credentials remain in `config.js`, set `HOMEBRIDGE_URL` on the MagicMirror server to the same exact origin, or set `HOMEBRIDGE_ALLOWED_ORIGINS` to a comma-separated exact allowlist such as `http://192.168.1.50:8581,https://homebridge.local:8581`. This explicit server-side trust is required for all destinations, including loopback, private-network, link-local, and cloud metadata addresses. Paths, queries, fragments, and embedded URL credentials are rejected. Automatic Bonjour fallback is disabled for renderer configuration because a discovered IP would not be an exact allowlist match.
+
+Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. A trusted self-signed local installation can explicitly set `homebridgeVerifySSL: false`, but disabling verification permits interception of Homebridge credentials and access tokens and should be limited to a trusted local network.
 
 ## Usage Examples
 
@@ -418,11 +420,13 @@ By default, the module also monitors the Homebridge outlet named `eBike - Pro` e
 
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 
-If the configured Homebridge hostname temporarily fails DNS resolution, the module automatically retries against a matching Homebridge web service discovered over Bonjour on the same port. The configured HTTP/HTTPS protocol and credentials are preserved.
-
-For HTTPS discovery, the discovered IP address must be covered by the Homebridge certificate when `homebridgeVerifySSL` is enabled.
-
 The module matches Homebridge accessories to Govee devices by device ID, with a case-insensitive device-name fallback. No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
+
+Trust the exact local origin on the MagicMirror server before using renderer-side Homebridge credentials:
+
+```bash
+export HOMEBRIDGE_URL="http://192.168.1.50:8581"
+```
 
 ```javascript
 {
@@ -433,6 +437,7 @@ The module matches Homebridge accessories to Govee devices by device ID, with a 
       homebridgeUrl: "http://192.168.1.50:8581",
       homebridgeUsername: "admin",
       homebridgePassword: "yourpassword",
+      homebridgeVerifySSL: true,
       showPowerConsumption: true,
       homebridgeAutoOffEnabled: true
    }

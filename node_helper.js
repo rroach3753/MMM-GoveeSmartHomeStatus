@@ -18,13 +18,8 @@ const HOMEBRIDGE_CURRENT_CONSUMPTION_UUID = "E863F10D-079E-48FF-8F27-9C2605A29F5
 module.exports = NodeHelper.create({
   start: function () {
     console.log("MMM-GoveeSmartHomeStatus node_helper started");
-    this.cloudCacheApiKey = "";
-    this.cachedCloudDevices = [];
-    this.cachedEnrichedCloudDevices = [];
-    this.lastCloudListFetchAt = 0;
-    this.lastCloudStateFetchAt = 0;
-    this.homebridgeToken = null;
-    this.homebridgeTokenExpiry = 0;
+    this.cloudCaches = new Map();
+    this.homebridgeTokenCache = new Map();
     this.homebridgeFallbackUrls = {};
     this.homebridgeAutoOffMonitors = {};
   },
@@ -159,57 +154,17 @@ module.exports = NodeHelper.create({
 
   resolveHomebridgeConfig: function (requestOptions) {
     var options = requestOptions || {};
+    var requestedUrl = String(options.homebridgeUrl || "").trim();
     var serverUsername = String(process.env.HOMEBRIDGE_USERNAME || "").trim();
     var serverPassword = String(process.env.HOMEBRIDGE_PASSWORD || "");
-    var hasServerCredentials = !!(serverUsername || serverPassword);
-
-    if (!hasServerCredentials) {
-      return {
-        url: String(options.homebridgeUrl || "").trim(),
-        username: String(options.homebridgeUsername || "").trim(),
-        password: String(options.homebridgePassword || ""),
-        allowDiscovery: true,
-        error: null
-      };
-    }
-
     var serverUrl = String(process.env.HOMEBRIDGE_URL || "").trim();
-    if (!serverUrl) {
-      return {
-        url: "",
-        username: "",
-        password: "",
-        allowDiscovery: false,
-        error: "HOMEBRIDGE_URL is required when server-side Homebridge credentials are configured."
-      };
-    }
-
-    if (!serverUsername) {
-      return {
-        url: "",
-        username: "",
-        password: "",
-        allowDiscovery: false,
-        error: "HOMEBRIDGE_USERNAME is required when server-side Homebridge credentials are configured."
-      };
-    }
+    var hasServerCredentials = !!(serverUsername || serverPassword);
+    var canonicalServerUrl;
+    var canonicalRequestedUrl;
+    var trustedOrigins;
 
     try {
-      var parsedUrl = new URL(serverUrl);
-      if (!["http:", "https:"].includes(parsedUrl.protocol) ||
-          parsedUrl.username || parsedUrl.password ||
-          (parsedUrl.pathname && parsedUrl.pathname !== "/") ||
-          parsedUrl.search || parsedUrl.hash) {
-        throw new Error("invalid origin");
-      }
-
-      return {
-        url: parsedUrl.origin,
-        username: serverUsername,
-        password: serverPassword,
-        allowDiscovery: false,
-        error: null
-      };
+      canonicalServerUrl = serverUrl ? this.canonicalizeHomebridgeOrigin(serverUrl) : "";
     } catch {
       return {
         url: "",
@@ -219,6 +174,115 @@ module.exports = NodeHelper.create({
         error: "HOMEBRIDGE_URL must be a valid HTTP(S) origin without a path, query, or credentials."
       };
     }
+
+    if (hasServerCredentials) {
+      if (!serverUrl) {
+        return {
+          url: "",
+          username: "",
+          password: "",
+          allowDiscovery: false,
+          error: "HOMEBRIDGE_URL is required when server-side Homebridge credentials are configured."
+        };
+      }
+
+      if (!serverUsername) {
+        return {
+          url: "",
+          username: "",
+          password: "",
+          allowDiscovery: false,
+          error: "HOMEBRIDGE_USERNAME is required when server-side Homebridge credentials are configured."
+        };
+      }
+
+      return {
+        url: canonicalServerUrl,
+        username: serverUsername,
+        password: serverPassword,
+        allowDiscovery: false,
+        error: null
+      };
+    }
+
+    if (!requestedUrl) {
+      return {
+        url: "",
+        username: String(options.homebridgeUsername || "").trim(),
+        password: String(options.homebridgePassword || ""),
+        allowDiscovery: false,
+        error: null
+      };
+    }
+
+    try {
+      canonicalRequestedUrl = this.canonicalizeHomebridgeOrigin(requestedUrl);
+      trustedOrigins = this.getTrustedHomebridgeOrigins(canonicalServerUrl);
+    } catch (error) {
+      return {
+        url: "",
+        username: "",
+        password: "",
+        allowDiscovery: false,
+        error: error.message
+      };
+    }
+
+    if (!trustedOrigins.has(canonicalRequestedUrl)) {
+      return {
+        url: "",
+        username: "",
+        password: "",
+        allowDiscovery: false,
+        error: "homebridgeUrl must exactly match HOMEBRIDGE_URL or an origin in HOMEBRIDGE_ALLOWED_ORIGINS."
+      };
+    }
+
+    return {
+      url: canonicalRequestedUrl,
+      username: String(options.homebridgeUsername || "").trim(),
+      password: String(options.homebridgePassword || ""),
+      allowDiscovery: false,
+      error: null
+    };
+  },
+
+  canonicalizeHomebridgeOrigin: function (urlValue) {
+    var parsedUrl = new URL(String(urlValue || "").trim());
+
+    if (!["http:", "https:"].includes(parsedUrl.protocol) ||
+        parsedUrl.username || parsedUrl.password ||
+        (parsedUrl.pathname && parsedUrl.pathname !== "/") ||
+        parsedUrl.search || parsedUrl.hash) {
+      throw new Error("Homebridge URLs must be valid HTTP(S) origins without a path, query, fragment, or credentials.");
+    }
+
+    return parsedUrl.origin;
+  },
+
+  getTrustedHomebridgeOrigins: function (canonicalServerUrl) {
+    var self = this;
+    var trustedOrigins = new Set();
+    var configuredOrigins = String(process.env.HOMEBRIDGE_ALLOWED_ORIGINS || "")
+      .split(",")
+      .map(function (origin) {
+        return origin.trim();
+      })
+      .filter(Boolean);
+
+    if (canonicalServerUrl) {
+      trustedOrigins.add(canonicalServerUrl);
+    }
+
+    configuredOrigins.forEach(function (origin) {
+      try {
+        trustedOrigins.add(self.canonicalizeHomebridgeOrigin(origin));
+      } catch {
+        throw new Error("HOMEBRIDGE_ALLOWED_ORIGINS must contain only comma-separated HTTP(S) origins without paths, queries, fragments, or credentials.");
+      }
+    });
+
+    return trustedOrigins;
   },
 
   normalizeRefreshInterval: function (value) {
@@ -231,31 +295,38 @@ module.exports = NodeHelper.create({
     return Math.floor(parsed);
   },
 
-  resetCloudCache: function (apiKey) {
-    this.cloudCacheApiKey = String(apiKey || "");
-    this.cachedCloudDevices = [];
-    this.cachedEnrichedCloudDevices = [];
-    this.lastCloudListFetchAt = 0;
-    this.lastCloudStateFetchAt = 0;
-  },
+  getCloudCache: function (apiKey) {
+    var apiKeyIdentity = String(apiKey || "");
+    var cache;
 
-  ensureCloudCacheForApiKey: function (apiKey) {
-    var currentApiKey = String(apiKey || "");
-
-    if (this.cloudCacheApiKey !== currentApiKey) {
-      this.resetCloudCache(currentApiKey);
+    if (!(this.cloudCaches instanceof Map)) {
+      this.cloudCaches = new Map();
     }
+
+    cache = this.cloudCaches.get(apiKeyIdentity);
+    if (!cache) {
+      cache = {
+        devices: [],
+        enrichedDevices: [],
+        lastListFetchAt: 0,
+        lastStateFetchAt: 0
+      };
+      this.cloudCaches.set(apiKeyIdentity, cache);
+    }
+
+    return cache;
   },
 
   fetchCloudDevicesSegmented: function (apiKey, listIntervalMs, stateIntervalMs, callback) {
     var self = this;
     var now = Date.now();
+    var cache = this.getCloudCache(apiKey);
     var listInterval = this.normalizeRefreshInterval(listIntervalMs);
     var stateInterval = this.normalizeRefreshInterval(stateIntervalMs);
-    var hasCachedList = Array.isArray(this.cachedCloudDevices) && this.cachedCloudDevices.length > 0;
-    var hasCachedEnriched = Array.isArray(this.cachedEnrichedCloudDevices) && this.cachedEnrichedCloudDevices.length > 0;
-    var shouldFetchList;
-    var shouldFetchState;
+    var hasCachedList = cache.devices.length > 0;
+    var hasCachedEnriched = cache.enrichedDevices.length > 0;
+    var shouldFetchList = !hasCachedList || listInterval === 0 || !cache.lastListFetchAt || (now - cache.lastListFetchAt >= listInterval);
+    var shouldFetchState = !hasCachedEnriched || stateInterval === 0 || !cache.lastStateFetchAt || (now - cache.lastStateFetchAt >= stateInterval);
 
     function done(error, devices) {
       callback(error || null, Array.isArray(devices) ? devices : []);
@@ -263,16 +334,11 @@ module.exports = NodeHelper.create({
 
     function updateStatesForDevices(baseDevices) {
       self.fetchDeviceStates(apiKey, baseDevices, function (enrichedDevices) {
-        self.cachedEnrichedCloudDevices = Array.isArray(enrichedDevices) ? enrichedDevices : [];
-        self.lastCloudStateFetchAt = Date.now();
-        done(null, self.cachedEnrichedCloudDevices);
+        cache.enrichedDevices = Array.isArray(enrichedDevices) ? enrichedDevices : [];
+        cache.lastStateFetchAt = Date.now();
+        done(null, cache.enrichedDevices);
       });
     }
-
-    this.ensureCloudCacheForApiKey(apiKey);
-
-    shouldFetchList = !hasCachedList || listInterval === 0 || !this.lastCloudListFetchAt || (now - this.lastCloudListFetchAt >= listInterval);
-    shouldFetchState = !hasCachedEnriched || stateInterval === 0 || !this.lastCloudStateFetchAt || (now - this.lastCloudStateFetchAt >= stateInterval);
 
     if (shouldFetchList) {
       this.fetchCloudDeviceList(apiKey, function (listError, cloudDevices) {
@@ -281,26 +347,26 @@ module.exports = NodeHelper.create({
           return;
         }
 
-        self.cachedCloudDevices = Array.isArray(cloudDevices) ? cloudDevices : [];
-        self.lastCloudListFetchAt = Date.now();
+        cache.devices = Array.isArray(cloudDevices) ? cloudDevices : [];
+        cache.lastListFetchAt = Date.now();
 
         if (shouldFetchState) {
-          updateStatesForDevices(self.cachedCloudDevices);
+          updateStatesForDevices(cache.devices);
           return;
         }
 
-        done(null, self.applyCachedStateToCloudDevices(self.cachedCloudDevices));
+        done(null, self.applyCachedStateToCloudDevices(cache.devices, cache.enrichedDevices));
       });
 
       return;
     }
 
     if (shouldFetchState) {
-      updateStatesForDevices(this.cachedCloudDevices);
+      updateStatesForDevices(cache.devices);
       return;
     }
 
-    done(null, this.cachedEnrichedCloudDevices);
+    done(null, cache.enrichedDevices);
   },
 
   fetchCloudDeviceList: function (apiKey, callback) {
@@ -383,14 +449,14 @@ module.exports = NodeHelper.create({
     req.end();
   },
 
-  applyCachedStateToCloudDevices: function (cloudDevices) {
+  applyCachedStateToCloudDevices: function (cloudDevices, cachedEnrichedDevices) {
     var stateById = {};
 
     if (!Array.isArray(cloudDevices)) {
       return [];
     }
 
-    (Array.isArray(this.cachedEnrichedCloudDevices) ? this.cachedEnrichedCloudDevices : []).forEach(function (device) {
+    (Array.isArray(cachedEnrichedDevices) ? cachedEnrichedDevices : []).forEach(function (device) {
       var key = String(device.deviceId || "").toLowerCase();
       if (!key) {
         return;
@@ -1410,8 +1476,6 @@ module.exports = NodeHelper.create({
         }
 
         self.homebridgeFallbackUrls[url] = discoveredUrl;
-        self.homebridgeToken = null;
-        self.homebridgeTokenExpiry = 0;
         console.warn("[MMM-GoveeSmartHomeStatus] Homebridge hostname could not resolve; using discovered endpoint " + discoveredUrl);
         self.fetchHomebridgePowerMapAtUrl(discoveredUrl, username, password, verifySSL, callback);
       });
@@ -1427,7 +1491,7 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      self.fetchHomebridgeAccessories(url, token, verifySSL, callback);
+      self.fetchHomebridgeAccessories(url, token, verifySSL, callback, null, username);
     });
   },
 
@@ -1444,7 +1508,7 @@ module.exports = NodeHelper.create({
 
         self.fetchHomebridgeAccessories(targetUrl, token, verifySSL, done, function (accessories) {
           return self.buildHomebridgeOutletMap(accessories);
-        });
+        }, username);
       });
     }
 
@@ -1466,8 +1530,6 @@ module.exports = NodeHelper.create({
         }
 
         self.homebridgeFallbackUrls[url] = discoveredUrl;
-        self.homebridgeToken = null;
-        self.homebridgeTokenExpiry = 0;
         console.warn("[MMM-GoveeSmartHomeStatus] Homebridge hostname could not resolve; using discovered endpoint " + discoveredUrl);
         fetchAtUrl(discoveredUrl, callback);
       });
@@ -1477,9 +1539,23 @@ module.exports = NodeHelper.create({
   withHomebridgeToken: function (url, username, password, verifySSL, callback) {
     var self = this;
     var now = Date.now();
+    var cacheKey;
+    var cachedToken;
 
-    if (this.homebridgeToken && now < this.homebridgeTokenExpiry) {
-      callback(null, this.homebridgeToken);
+    try {
+      cacheKey = this.getHomebridgeTokenCacheKey(url, username);
+    } catch (error) {
+      callback(error, null);
+      return;
+    }
+
+    if (!(this.homebridgeTokenCache instanceof Map)) {
+      this.homebridgeTokenCache = new Map();
+    }
+
+    cachedToken = this.homebridgeTokenCache.get(cacheKey);
+    if (cachedToken && cachedToken.token && now < cachedToken.expiresAt) {
+      callback(null, cachedToken.token);
       return;
     }
 
@@ -1489,10 +1565,34 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      self.homebridgeToken = token;
-      self.homebridgeTokenExpiry = expiresAt;
+      self.homebridgeTokenCache.set(cacheKey, {
+        token: token,
+        expiresAt: expiresAt
+      });
       callback(null, token);
     });
+  },
+
+  getHomebridgeTokenCacheKey: function (url, username) {
+    return JSON.stringify([
+      this.canonicalizeHomebridgeOrigin(url),
+      String(username || "")
+    ]);
+  },
+
+  invalidateHomebridgeToken: function (url, username, token) {
+    var cacheKey;
+    var cachedToken;
+
+    if (!(this.homebridgeTokenCache instanceof Map)) {
+      return;
+    }
+
+    cacheKey = this.getHomebridgeTokenCacheKey(url, username);
+    cachedToken = this.homebridgeTokenCache.get(cacheKey);
+    if (!token || (cachedToken && cachedToken.token === token)) {
+      this.homebridgeTokenCache.delete(cacheKey);
+    }
   },
 
   isHomebridgeDnsError: function (error) {
@@ -1620,7 +1720,7 @@ module.exports = NodeHelper.create({
     req.end();
   },
 
-  fetchHomebridgeAccessories: function (baseUrl, token, verifySSL, callback, resultMapper) {
+  fetchHomebridgeAccessories: function (baseUrl, token, verifySSL, callback, resultMapper, username) {
     var self = this;
     var urlInfo = this.parseSimpleUrl(baseUrl);
     var isSettled = false;
@@ -1663,8 +1763,7 @@ module.exports = NodeHelper.create({
 
       res.on("end", function () {
         if (res.statusCode === 401) {
-          self.homebridgeToken = null;
-          self.homebridgeTokenExpiry = 0;
+          self.invalidateHomebridgeToken(baseUrl, username, token);
           safeCallback(new Error("Homebridge token rejected (401) — will re-authenticate next cycle"));
           return;
         }
@@ -1813,11 +1912,11 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      self.writeHomebridgeCharacteristic(targetUrl, token, verifySSL, uniqueId, characteristicType, value, callback);
+      self.writeHomebridgeCharacteristic(targetUrl, token, verifySSL, uniqueId, characteristicType, value, callback, username);
     });
   },
 
-  writeHomebridgeCharacteristic: function (baseUrl, token, verifySSL, uniqueId, characteristicType, value, callback) {
+  writeHomebridgeCharacteristic: function (baseUrl, token, verifySSL, uniqueId, characteristicType, value, callback, username) {
     var self = this;
     var urlInfo = this.parseSimpleUrl(baseUrl);
     var isSettled = false;
@@ -1865,8 +1964,7 @@ module.exports = NodeHelper.create({
 
       res.on("end", function () {
         if (res.statusCode === 401) {
-          self.homebridgeToken = null;
-          self.homebridgeTokenExpiry = 0;
+          self.invalidateHomebridgeToken(baseUrl, username, token);
         }
 
         if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1911,24 +2009,14 @@ module.exports = NodeHelper.create({
   },
 
   parseSimpleUrl: function (urlString) {
-    var str = String(urlString || "").trim();
-    var isHttps = str.indexOf("https://") === 0;
-    var withoutProtocol = str.replace(/^https?:\/\//, "");
-    var slashIdx = withoutProtocol.indexOf("/");
-    var hostAndPort = slashIdx === -1 ? withoutProtocol : withoutProtocol.slice(0, slashIdx);
-    var colonIdx = hostAndPort.lastIndexOf(":");
-    var hostname;
-    var port;
+    var parsedUrl = new URL(this.canonicalizeHomebridgeOrigin(urlString));
+    var isHttps = parsedUrl.protocol === "https:";
 
-    if (colonIdx !== -1) {
-      hostname = hostAndPort.slice(0, colonIdx);
-      port = Number(hostAndPort.slice(colonIdx + 1)) || (isHttps ? 443 : 80);
-    } else {
-      hostname = hostAndPort;
-      port = isHttps ? 443 : 80;
-    }
-
-    return { isHttps: isHttps, hostname: hostname, port: port };
+    return {
+      isHttps: isHttps,
+      hostname: parsedUrl.hostname,
+      port: Number(parsedUrl.port) || (isHttps ? 443 : 80)
+    };
   },
 
   generateRequestId: function () {

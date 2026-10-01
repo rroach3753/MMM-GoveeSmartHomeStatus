@@ -38,7 +38,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     homebridgeUrl: "",
     homebridgeUsername: "",
     homebridgePassword: "",
-    homebridgeVerifySSL: false,
+    homebridgeVerifySSL: true,
     showPowerConsumption: true,
     homebridgeAutoOffEnabled: true,
     homebridgeAutoOffDeviceName: "eBike - Pro",
