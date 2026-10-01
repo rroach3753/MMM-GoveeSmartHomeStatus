@@ -212,15 +212,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       return wrapper;
     }
 
-    // No API key
-    if (!this.config.apiKey && !(this.config.enableLanControl && this.config.lanOnly)) {
-      var noKeyDiv = document.createElement("div");
-      noKeyDiv.className = "message";
-      noKeyDiv.textContent = this.config.noApiKeyMessage;
-      wrapper.appendChild(noKeyDiv);
-      return wrapper;
-    }
-
     // Loading state
     if (this.dataState.loading) {
       var loadingDiv = document.createElement("div");

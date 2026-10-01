@@ -36,6 +36,17 @@ function loadFrontendModule() {
       }
     },
     console: { warn() {} },
+    document: {
+      createElement() {
+        return {
+          children: [],
+          classList: { add() {} },
+          appendChild(child) {
+            this.children.push(child);
+          }
+        };
+      }
+    },
     clearTimeout(timerId) {
       timers.delete(timerId);
     },
@@ -99,6 +110,25 @@ test("frontend defaults Homebridge TLS verification on while preserving auto-off
   assert.equal(requestPayload.homebridgeVerifySSL, true);
   assert.equal(requestPayload.homebridgeAutoOffEnabled, true);
   assert.equal(requestPayload.homebridgeAutoOffDeviceName, "eBike - Pro");
+});
+
+test("frontend waits for server data when the API key is environment-only", () => {
+  const { definition } = loadFrontendModule();
+  const moduleInstance = Object.assign({}, definition, {
+    config: Object.assign({}, definition.defaults, { apiKey: "" }),
+    dataState: {
+      devices: [],
+      fetchedAt: null,
+      error: null,
+      loading: true
+    }
+  });
+
+  const dom = moduleInstance.getDom();
+  const messages = dom.children.map((child) => child.textContent);
+
+  assert.ok(messages.includes(definition.defaults.loadingMessage));
+  assert.ok(!messages.includes(definition.defaults.noApiKeyMessage));
 });
 
 test("full-width bottom bar keeps wattage visible", () => {
