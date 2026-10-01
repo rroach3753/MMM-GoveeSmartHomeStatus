@@ -313,6 +313,32 @@ test("server Homebridge credentials require a trusted server URL", () => {
   }
 });
 
+test("server Homebridge TLS verification uses the server environment", () => {
+  const previousValues = {
+    HOMEBRIDGE_USERNAME: process.env.HOMEBRIDGE_USERNAME,
+    HOMEBRIDGE_PASSWORD: process.env.HOMEBRIDGE_PASSWORD,
+    HOMEBRIDGE_VERIFY_SSL: process.env.HOMEBRIDGE_VERIFY_SSL
+  };
+  process.env.HOMEBRIDGE_USERNAME = "server-user";
+  process.env.HOMEBRIDGE_PASSWORD = "server-password";
+
+  try {
+    delete process.env.HOMEBRIDGE_VERIFY_SSL;
+    assert.equal(helper.resolveHomebridgeVerifySSL({ homebridgeVerifySSL: false }), true);
+
+    process.env.HOMEBRIDGE_VERIFY_SSL = "false";
+    assert.equal(helper.resolveHomebridgeVerifySSL({ homebridgeVerifySSL: true }), false);
+  } finally {
+    Object.entries(previousValues).forEach(([name, value]) => {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    });
+  }
+});
+
 test("renderer Homebridge origins require an exact server allowlist match", () => {
   const previousValues = {
     HOMEBRIDGE_URL: process.env.HOMEBRIDGE_URL,

@@ -229,7 +229,7 @@ Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBR
 
 Renderer-provided URLs are not trusted network destinations. If credentials remain in `config.js`, set `HOMEBRIDGE_URL` on the MagicMirror server to the same exact origin, or set `HOMEBRIDGE_ALLOWED_ORIGINS` to a comma-separated exact allowlist such as `http://192.168.1.50:8581,https://homebridge.local:8581`. This explicit server-side trust is required for all destinations, including loopback, private-network, link-local, and cloud metadata addresses. Paths, queries, fragments, and embedded URL credentials are rejected. Automatic Bonjour fallback is disabled for renderer configuration because a discovered IP would not be an exact allowlist match.
 
-Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. A trusted self-signed local installation can explicitly set `homebridgeVerifySSL: false`, but disabling verification permits interception of Homebridge credentials and access tokens and should be limited to a trusted local network.
+Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. When Homebridge credentials are supplied through the server environment, a trusted self-signed local installation can explicitly set `HOMEBRIDGE_VERIFY_SSL=false`. For renderer-supplied credentials, use `homebridgeVerifySSL: false`. Disabling verification permits interception of Homebridge credentials and access tokens and should be limited to a trusted local network.
 
 ## Usage Examples
 

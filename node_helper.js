@@ -59,7 +59,7 @@ module.exports = NodeHelper.create({
     var homebridgeUrl = homebridgeConfig.url;
     var homebridgeUsername = homebridgeConfig.username;
     var homebridgePassword = homebridgeConfig.password;
-    var homebridgeVerifySSL = this.normalizeBoolean(requestOptions.homebridgeVerifySSL, true);
+    var homebridgeVerifySSL = this.resolveHomebridgeVerifySSL(requestOptions);
     var hasHomebridge = !!(homebridgeUrl && homebridgeUsername);
 
     if (homebridgeConfig.error) {
@@ -245,6 +245,18 @@ module.exports = NodeHelper.create({
       allowDiscovery: false,
       error: null
     };
+  },
+
+  resolveHomebridgeVerifySSL: function (requestOptions) {
+    var hasServerCredentials = !!String(
+      process.env.HOMEBRIDGE_USERNAME || process.env.HOMEBRIDGE_PASSWORD || ""
+    ).trim();
+
+    if (hasServerCredentials) {
+      return this.normalizeBoolean(process.env.HOMEBRIDGE_VERIFY_SSL, true);
+    }
+
+    return this.normalizeBoolean(requestOptions && requestOptions.homebridgeVerifySSL, true);
   },
 
   canonicalizeHomebridgeOrigin: function (urlValue) {
@@ -1258,11 +1270,11 @@ module.exports = NodeHelper.create({
       return value;
     }
 
-    if (value === 1 || value === "1" || value === "on") {
+    if (value === 1 || value === "1" || value === "on" || value === "true" || value === "yes") {
       return true;
     }
 
-    if (value === 0 || value === "0" || value === "off") {
+    if (value === 0 || value === "0" || value === "off" || value === "false" || value === "no") {
       return false;
     }
 
