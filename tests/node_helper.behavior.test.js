@@ -181,6 +181,108 @@ test("Homebridge discovery preserves HTTPS and requires a matching web service p
   );
 });
 
+test("server Homebridge credentials ignore renderer origins and disable discovery", async () => {
+  const previousUrl = process.env.HOMEBRIDGE_URL;
+  const previousUsername = process.env.HOMEBRIDGE_USERNAME;
+  const previousPassword = process.env.HOMEBRIDGE_PASSWORD;
+  const originalFetch = helper.fetchHomebridgePowerMapAtUrl;
+  const originalDiscover = helper.discoverHomebridgeUrl;
+  let discoveryAttempted = false;
+
+  process.env.HOMEBRIDGE_URL = "https://trusted.example:8581";
+  process.env.HOMEBRIDGE_USERNAME = "server-user";
+  process.env.HOMEBRIDGE_PASSWORD = "server-password";
+  helper.homebridgeFallbackUrls = {};
+
+  try {
+    const config = helper.resolveHomebridgeConfig({
+      homebridgeUrl: "https://attacker.example",
+      homebridgeUsername: "renderer-user",
+      homebridgePassword: "renderer-password"
+    });
+
+    assert.deepEqual(config, {
+      url: "https://trusted.example:8581",
+      username: "server-user",
+      password: "server-password",
+      allowDiscovery: false,
+      error: null
+    });
+
+    helper.fetchHomebridgePowerMapAtUrl = (url, username, password, verifySSL, callback) => {
+      assert.equal(url, "https://trusted.example:8581");
+      const error = new Error("getaddrinfo ENOTFOUND trusted.example");
+      error.code = "ENOTFOUND";
+      callback(error, null);
+    };
+    helper.discoverHomebridgeUrl = () => {
+      discoveryAttempted = true;
+    };
+
+    await new Promise((resolve) => {
+      helper.fetchHomebridgePowerMap(
+        config.url,
+        config.username,
+        config.password,
+        true,
+        (error) => {
+          assert.match(error.message, /ENOTFOUND/);
+          resolve();
+        },
+        config.allowDiscovery
+      );
+    });
+
+    assert.equal(discoveryAttempted, false);
+  } finally {
+    helper.fetchHomebridgePowerMapAtUrl = originalFetch;
+    helper.discoverHomebridgeUrl = originalDiscover;
+    helper.homebridgeFallbackUrls = {};
+    const values = {
+      HOMEBRIDGE_URL: previousUrl,
+      HOMEBRIDGE_USERNAME: previousUsername,
+      HOMEBRIDGE_PASSWORD: previousPassword
+    };
+    Object.entries(values).forEach(([name, value]) => {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    });
+  }
+});
+
+test("server Homebridge credentials require a trusted server URL", () => {
+  const previousUrl = process.env.HOMEBRIDGE_URL;
+  const previousUsername = process.env.HOMEBRIDGE_USERNAME;
+  const previousPassword = process.env.HOMEBRIDGE_PASSWORD;
+  delete process.env.HOMEBRIDGE_URL;
+  process.env.HOMEBRIDGE_USERNAME = "server-user";
+  process.env.HOMEBRIDGE_PASSWORD = "server-password";
+
+  try {
+    const config = helper.resolveHomebridgeConfig({
+      homebridgeUrl: "https://attacker.example"
+    });
+    assert.match(config.error, /HOMEBRIDGE_URL is required/);
+    assert.equal(config.url, "");
+  } finally {
+    const values = {
+      HOMEBRIDGE_URL: previousUrl,
+      HOMEBRIDGE_USERNAME: previousUsername,
+      HOMEBRIDGE_PASSWORD: previousPassword
+    };
+    Object.entries(values).forEach(([name, value]) => {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    });
+  }
+});
+
 test("Homebridge power retries through discovery only after DNS failure", async () => {
   const originalFetch = helper.fetchHomebridgePowerMapAtUrl;
   const originalDiscover = helper.discoverHomebridgeUrl;

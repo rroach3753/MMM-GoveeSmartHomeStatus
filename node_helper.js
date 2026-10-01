@@ -2,6 +2,7 @@ const NodeHelper = require("node_helper");
 const http = require("node:http");
 const https = require("node:https");
 const dgram = require("node:dgram");
+const { URL } = require("node:url");
 const { Bonjour } = require("bonjour-service");
 
 const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
@@ -51,6 +52,7 @@ module.exports = NodeHelper.create({
   fetchGoveeDevices: function (requestOptions) {
     var self = this;
     var instanceId = requestOptions.instanceId || null;
+    var homebridgeConfig = this.resolveHomebridgeConfig(requestOptions);
     var apiKey = process.env.GOVEE_API_KEY || requestOptions.apiKey;
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
@@ -59,17 +61,23 @@ module.exports = NodeHelper.create({
     var staticLanDevices = this.normalizeStaticLanDevices(requestOptions.lanStaticDevices);
     var cloudDeviceListRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceListRefreshInterval);
     var cloudDeviceStateRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceStateRefreshInterval);
-    var homebridgeUrl = String(requestOptions.homebridgeUrl || "").trim();
-    var homebridgeUsername = String(process.env.HOMEBRIDGE_USERNAME || requestOptions.homebridgeUsername || "").trim();
-    var homebridgePassword = String(process.env.HOMEBRIDGE_PASSWORD || requestOptions.homebridgePassword || "");
+    var homebridgeUrl = homebridgeConfig.url;
+    var homebridgeUsername = homebridgeConfig.username;
+    var homebridgePassword = homebridgeConfig.password;
     var homebridgeVerifySSL = this.normalizeBoolean(requestOptions.homebridgeVerifySSL, true);
     var hasHomebridge = !!(homebridgeUrl && homebridgeUsername);
+
+    if (homebridgeConfig.error) {
+      this.sendDevicesError(homebridgeConfig.error, instanceId);
+      return;
+    }
 
     this.configureHomebridgeAutoOff(instanceId, hasHomebridge ? {
       url: homebridgeUrl,
       username: homebridgeUsername,
       password: homebridgePassword,
       verifySSL: homebridgeVerifySSL,
+      allowDiscovery: homebridgeConfig.allowDiscovery,
       enabled: this.normalizeBoolean(requestOptions.homebridgeAutoOffEnabled, true),
       deviceName: String(requestOptions.homebridgeAutoOffDeviceName || "eBike - Pro").trim(),
       thresholdWatts: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffThresholdWatts, 5),
@@ -85,7 +93,7 @@ module.exports = NodeHelper.create({
       }
       self.withHomebridgePower(homebridgeUrl, homebridgeUsername, homebridgePassword, homebridgeVerifySSL, devices, function (enrichedDevices) {
         self.sendDevicesData(enrichedDevices, instanceId);
-      });
+      }, homebridgeConfig.allowDiscovery);
     }
 
     function sendCloudData() {
@@ -147,6 +155,70 @@ module.exports = NodeHelper.create({
     }
 
     sendCloudData();
+  },
+
+  resolveHomebridgeConfig: function (requestOptions) {
+    var options = requestOptions || {};
+    var serverUsername = String(process.env.HOMEBRIDGE_USERNAME || "").trim();
+    var serverPassword = String(process.env.HOMEBRIDGE_PASSWORD || "");
+    var hasServerCredentials = !!(serverUsername || serverPassword);
+
+    if (!hasServerCredentials) {
+      return {
+        url: String(options.homebridgeUrl || "").trim(),
+        username: String(options.homebridgeUsername || "").trim(),
+        password: String(options.homebridgePassword || ""),
+        allowDiscovery: true,
+        error: null
+      };
+    }
+
+    var serverUrl = String(process.env.HOMEBRIDGE_URL || "").trim();
+    if (!serverUrl) {
+      return {
+        url: "",
+        username: "",
+        password: "",
+        allowDiscovery: false,
+        error: "HOMEBRIDGE_URL is required when server-side Homebridge credentials are configured."
+      };
+    }
+
+    if (!serverUsername) {
+      return {
+        url: "",
+        username: "",
+        password: "",
+        allowDiscovery: false,
+        error: "HOMEBRIDGE_USERNAME is required when server-side Homebridge credentials are configured."
+      };
+    }
+
+    try {
+      var parsedUrl = new URL(serverUrl);
+      if (!["http:", "https:"].includes(parsedUrl.protocol) ||
+          parsedUrl.username || parsedUrl.password ||
+          (parsedUrl.pathname && parsedUrl.pathname !== "/") ||
+          parsedUrl.search || parsedUrl.hash) {
+        throw new Error("invalid origin");
+      }
+
+      return {
+        url: parsedUrl.origin,
+        username: serverUsername,
+        password: serverPassword,
+        allowDiscovery: false,
+        error: null
+      };
+    } catch {
+      return {
+        url: "",
+        username: "",
+        password: "",
+        allowDiscovery: false,
+        error: "HOMEBRIDGE_URL must be a valid HTTP(S) origin without a path, query, or credentials."
+      };
+    }
   },
 
   normalizeRefreshInterval: function (value) {
@@ -1266,9 +1338,11 @@ module.exports = NodeHelper.create({
             }
 
             self.scheduleHomebridgeAutoOffPoll(monitorId);
-          }
+          },
+          monitor.config.allowDiscovery
         );
-      }
+      },
+      monitor.config.allowDiscovery
     );
   },
 
@@ -1298,7 +1372,7 @@ module.exports = NodeHelper.create({
     return now - monitor.belowSince >= monitor.config.belowDuration;
   },
 
-  withHomebridgePower: function (url, username, password, verifySSL, devices, callback) {
+  withHomebridgePower: function (url, username, password, verifySSL, devices, callback, allowDiscovery) {
     var self = this;
 
     this.fetchHomebridgePowerMap(url, username, password, verifySSL, function (error, powerMap) {
@@ -1311,12 +1385,12 @@ module.exports = NodeHelper.create({
       }
 
       callback(self.applyHomebridgePower(devices, powerMap));
-    });
+    }, allowDiscovery);
   },
 
-  fetchHomebridgePowerMap: function (url, username, password, verifySSL, callback) {
+  fetchHomebridgePowerMap: function (url, username, password, verifySSL, callback, allowDiscovery) {
     var self = this;
-    var fallbackUrl = this.homebridgeFallbackUrls[url];
+    var fallbackUrl = allowDiscovery === false ? null : this.homebridgeFallbackUrls[url];
 
     if (fallbackUrl) {
       this.fetchHomebridgePowerMapAtUrl(fallbackUrl, username, password, verifySSL, callback);
@@ -1324,7 +1398,7 @@ module.exports = NodeHelper.create({
     }
 
     this.fetchHomebridgePowerMapAtUrl(url, username, password, verifySSL, function (error, powerMap) {
-      if (!self.isHomebridgeDnsError(error)) {
+      if (!self.isHomebridgeDnsError(error) || allowDiscovery === false) {
         callback(error, powerMap);
         return;
       }
@@ -1357,9 +1431,9 @@ module.exports = NodeHelper.create({
     });
   },
 
-  fetchHomebridgeOutletMap: function (url, username, password, verifySSL, callback) {
+  fetchHomebridgeOutletMap: function (url, username, password, verifySSL, callback, allowDiscovery) {
     var self = this;
-    var fallbackUrl = this.homebridgeFallbackUrls[url];
+    var fallbackUrl = allowDiscovery === false ? null : this.homebridgeFallbackUrls[url];
 
     function fetchAtUrl(targetUrl, done) {
       self.withHomebridgeToken(targetUrl, username, password, verifySSL, function (tokenError, token) {
@@ -1380,7 +1454,7 @@ module.exports = NodeHelper.create({
     }
 
     fetchAtUrl(url, function (error, outletMap) {
-      if (!self.isHomebridgeDnsError(error)) {
+      if (!self.isHomebridgeDnsError(error) || allowDiscovery === false) {
         callback(error, outletMap);
         return;
       }
@@ -1729,9 +1803,9 @@ module.exports = NodeHelper.create({
     return outletMap;
   },
 
-  setHomebridgeOutletState: function (url, username, password, verifySSL, uniqueId, characteristicType, value, callback) {
+  setHomebridgeOutletState: function (url, username, password, verifySSL, uniqueId, characteristicType, value, callback, allowDiscovery) {
     var self = this;
-    var targetUrl = this.homebridgeFallbackUrls[url] || url;
+    var targetUrl = allowDiscovery === false ? url : (this.homebridgeFallbackUrls[url] || url);
 
     this.withHomebridgeToken(targetUrl, username, password, verifySSL, function (error, token) {
       if (error) {

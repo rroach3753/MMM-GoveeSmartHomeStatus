@@ -225,7 +225,7 @@ Then restart MagicMirror.
 
 ## Security
 
-Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment. Server-side values take precedence over configured values.
+Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment. `HOMEBRIDGE_URL` must be an HTTP(S) origin without a path, query, or embedded credentials and is required when server-side Homebridge credentials are used. Server-side values take precedence over configured values, and renderer-provided Homebridge origins are ignored when server credentials are configured.
 
 Homebridge HTTPS certificate verification is disabled by default for compatibility with self-signed local installations. Set `homebridgeVerifySSL: true` when Homebridge uses a certificate trusted by the MagicMirror host. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. Disabling verification permits interception of Homebridge credentials and access tokens, so use this integration only on a trusted local network when verification is off.
 
