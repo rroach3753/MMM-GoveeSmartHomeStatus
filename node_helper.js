@@ -1266,15 +1266,17 @@ module.exports = NodeHelper.create({
   },
 
   normalizeBoolean: function (value, fallbackValue) {
+    var normalizedValue = typeof value === "string" ? value.trim().toLowerCase() : value;
+
     if (typeof value === "boolean") {
       return value;
     }
 
-    if (value === 1 || value === "1" || value === "on" || value === "true" || value === "yes") {
+    if (normalizedValue === 1 || normalizedValue === "1" || normalizedValue === "on" || normalizedValue === "true" || normalizedValue === "yes") {
       return true;
     }
 
-    if (value === 0 || value === "0" || value === "off" || value === "false" || value === "no") {
+    if (normalizedValue === 0 || normalizedValue === "0" || normalizedValue === "off" || normalizedValue === "false" || normalizedValue === "no") {
       return false;
     }
 

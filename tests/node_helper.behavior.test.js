@@ -326,7 +326,7 @@ test("server Homebridge TLS verification uses the server environment", () => {
     delete process.env.HOMEBRIDGE_VERIFY_SSL;
     assert.equal(helper.resolveHomebridgeVerifySSL({ homebridgeVerifySSL: false }), true);
 
-    process.env.HOMEBRIDGE_VERIFY_SSL = "false";
+    process.env.HOMEBRIDGE_VERIFY_SSL = " false\r";
     assert.equal(helper.resolveHomebridgeVerifySSL({ homebridgeVerifySSL: true }), false);
   } finally {
     Object.entries(previousValues).forEach(([name, value]) => {
