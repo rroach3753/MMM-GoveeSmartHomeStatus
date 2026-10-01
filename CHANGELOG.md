@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Prevented grouped compact cards from extending off-screen in the full-width bottom bar
+- Prevented grouped compact cards from extending off-screen without making the full-width bottom bar excessively tall
 
 ## [1.4.1] - 2026-09-30
 
