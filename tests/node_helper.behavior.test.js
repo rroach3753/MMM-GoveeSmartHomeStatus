@@ -141,6 +141,19 @@ test("full-width bottom bar keeps wattage visible", () => {
   assert.match(css.slice(visibleWattageIndex), /display: inline;/);
 });
 
+test("grouped bottom bar fits room cards within the available width", () => {
+  const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
+  const listRule = css.match(/\.full-width-bottom-bar \.compact-card-list\.grouped-by-room \{([^}]+)\}/);
+  const roomRule = css.match(/\.full-width-bottom-bar \.compact-room-cards \{([^}]+)\}/);
+
+  assert.ok(listRule);
+  assert.match(listRule[1], /width: 100%;/);
+  assert.match(listRule[1], /flex-wrap: wrap;/);
+  assert.doesNotMatch(listRule[1], /width: max-content;/);
+  assert.ok(roomRule);
+  assert.match(roomRule[1], /grid-template-rows: repeat\(3,/);
+});
+
 test("compact cards group by configured room order with local device names", () => {
   const { definition } = loadFrontendModule();
   const moduleInstance = Object.assign({}, definition, {

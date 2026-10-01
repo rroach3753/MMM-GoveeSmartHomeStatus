@@ -420,15 +420,18 @@
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.grouped-by-room {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: stretch;
-  gap: 0;
-  width: max-content;
-  min-width: 100%;
+  justify-content: center;
+  gap: 4px 0;
+  width: 100%;
+  min-width: 0;
   padding: 2px 0 0;
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-room-group {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   padding: 0 8px;
   border-left: 1px solid rgba(255, 255, 255, 0.16);
 }
@@ -458,9 +461,9 @@
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-room-cards {
   grid-auto-flow: column;
-  grid-template-rows: repeat(2, minmax(30px, auto));
+  grid-template-rows: repeat(3, minmax(28px, auto));
   grid-template-columns: none;
-  grid-auto-columns: clamp(76px, 5.5vw, 106px);
+  grid-auto-columns: clamp(58px, 4.5vw, 90px);
   gap: 4px;
   padding-top: 3px;
 }

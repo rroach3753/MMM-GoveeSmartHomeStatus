@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Prevented grouped compact cards from extending off-screen in the full-width bottom bar
+
 ## [1.4.1] - 2026-09-30
 
 ### Fixed

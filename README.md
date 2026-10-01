@@ -248,6 +248,8 @@ Homebridge HTTPS certificate verification is enabled by default. For a private c
 
 ### Full-Width Bottom Bar Layout
 
+Grouped compact cards use three rows in the full-width bottom bar so room sections remain within the available screen width instead of extending into an off-screen horizontal strip.
+
 ```javascript
 {
    module: "MMM-GoveeSmartHomeStatus",
