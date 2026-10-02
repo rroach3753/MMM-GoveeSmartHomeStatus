@@ -222,6 +222,11 @@ Then restart MagicMirror.
 | `homebridgeAutoOffArmWatts` | Number | Wattage that must be observed before low-power shutoff is armed | `20` |
 | `homebridgeAutoOffBelowDuration` | Number | Time in milliseconds that power must remain below the threshold | `300000` |
 | `homebridgeAutoOffPollInterval` | Number | Local Homebridge polling interval in milliseconds; does not use the Govee OpenAPI | `30000` |
+| `presenceDisplayControlEnabled` | Boolean | Control the MagicMirror monitor from a Homebridge occupancy sensor | `false` |
+| `presenceDisplaySensorName` | String | Exact Homebridge occupancy accessory or service name | `"Hallway - Sensor"` |
+| `presenceDisplayOffDelay` | Number | Continuous absence time before turning off the display, in milliseconds | `300000` |
+| `presenceDisplayPollInterval` | Number | Homebridge occupancy polling interval, in milliseconds | `15000` |
+| `presenceDisplayOutput` | String | Wayland output controlled with `wlr-randr` | `"HDMI-A-1"` |
 
 ## Security
 

@@ -653,6 +653,37 @@ test("Homebridge auto-off requires charging and sustained power below threshold"
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 303000), true);
 });
 
+test("Homebridge occupancy map reads presence sensor state", () => {
+  const accessories = [{
+    accessoryInformation: { Name: "Hallway - Sensor" },
+    serviceCharacteristics: [{
+      uuid: "00000071-0000-1000-8000-0026BB765291",
+      serviceName: "Hallway - Sensor",
+      value: 0
+    }]
+  }];
+
+  assert.deepEqual(helper.buildHomebridgeOccupancyMap(accessories), {
+    "hallway - sensor": false
+  });
+});
+
+test("presence display waits five minutes to turn off and wakes immediately", () => {
+  const monitor = {
+    config: { offDelay: 300000 },
+    absentSince: null,
+    displayOn: true
+  };
+
+  assert.equal(helper.processPresenceDisplayReading(monitor, false, 1000), null);
+  assert.equal(helper.processPresenceDisplayReading(monitor, false, 300999), null);
+  assert.equal(helper.processPresenceDisplayReading(monitor, false, 301000), "off");
+
+  monitor.displayOn = false;
+  assert.equal(helper.processPresenceDisplayReading(monitor, true, 302000), "on");
+  assert.equal(monitor.absentSince, null);
+});
+
 test("Homebridge characteristic writer sends outlet off command", async () => {
   const originalRequest = http.request;
   let requestOptions;

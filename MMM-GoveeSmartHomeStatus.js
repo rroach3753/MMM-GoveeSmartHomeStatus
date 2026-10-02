@@ -45,7 +45,12 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     homebridgeAutoOffThresholdWatts: 5,
     homebridgeAutoOffArmWatts: 20,
     homebridgeAutoOffBelowDuration: 300000,
-    homebridgeAutoOffPollInterval: 30000
+    homebridgeAutoOffPollInterval: 30000,
+    presenceDisplayControlEnabled: false,
+    presenceDisplaySensorName: "Hallway - Sensor",
+    presenceDisplayOffDelay: 300000,
+    presenceDisplayPollInterval: 15000,
+    presenceDisplayOutput: "HDMI-A-1"
   },
 
   start: function () {
@@ -87,7 +92,12 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       homebridgeAutoOffThresholdWatts: this.config.homebridgeAutoOffThresholdWatts,
       homebridgeAutoOffArmWatts: this.config.homebridgeAutoOffArmWatts,
       homebridgeAutoOffBelowDuration: this.config.homebridgeAutoOffBelowDuration,
-      homebridgeAutoOffPollInterval: this.config.homebridgeAutoOffPollInterval
+      homebridgeAutoOffPollInterval: this.config.homebridgeAutoOffPollInterval,
+      presenceDisplayControlEnabled: this.config.presenceDisplayControlEnabled,
+      presenceDisplaySensorName: this.config.presenceDisplaySensorName,
+      presenceDisplayOffDelay: this.config.presenceDisplayOffDelay,
+      presenceDisplayPollInterval: this.config.presenceDisplayPollInterval,
+      presenceDisplayOutput: this.config.presenceDisplayOutput
     });
 
     if (this.configRetryTimer) {

@@ -2,6 +2,7 @@ const NodeHelper = require("node_helper");
 const http = require("node:http");
 const https = require("node:https");
 const dgram = require("node:dgram");
+const childProcess = require("node:child_process");
 const { URL } = require("node:url");
 const { Bonjour } = require("bonjour-service");
 
@@ -13,6 +14,7 @@ const LAN_DEVICE_CONTROL_PORT = 4003;
 const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
 const MAX_RESPONSE_BYTES = 1048576;
 const HOMEBRIDGE_ON_UUID = "00000025-0000-1000-8000-0026BB765291";
+const HOMEBRIDGE_OCCUPANCY_UUID = "00000071-0000-1000-8000-0026BB765291";
 const HOMEBRIDGE_CURRENT_CONSUMPTION_UUID = "E863F10D-079E-48FF-8F27-9C2605A29F52";
 
 module.exports = NodeHelper.create({
@@ -22,6 +24,7 @@ module.exports = NodeHelper.create({
     this.homebridgeTokenCache = new Map();
     this.homebridgeFallbackUrls = {};
     this.homebridgeAutoOffMonitors = {};
+    this.presenceDisplayMonitors = {};
   },
 
   sendDevicesData: function (devices, instanceId) {
@@ -79,6 +82,18 @@ module.exports = NodeHelper.create({
       armWatts: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffArmWatts, 20),
       belowDuration: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffBelowDuration, 300000),
       pollInterval: Math.max(5000, this.normalizePositiveNumber(requestOptions.homebridgeAutoOffPollInterval, 30000))
+    } : null);
+    this.configurePresenceDisplayMonitor(instanceId, hasHomebridge ? {
+      url: homebridgeUrl,
+      username: homebridgeUsername,
+      password: homebridgePassword,
+      verifySSL: homebridgeVerifySSL,
+      allowDiscovery: homebridgeConfig.allowDiscovery,
+      enabled: this.normalizeBoolean(requestOptions.presenceDisplayControlEnabled, false),
+      sensorName: String(requestOptions.presenceDisplaySensorName || "Hallway - Sensor").trim(),
+      offDelay: Math.max(1000, this.normalizePositiveNumber(requestOptions.presenceDisplayOffDelay, 300000)),
+      pollInterval: Math.max(5000, this.normalizePositiveNumber(requestOptions.presenceDisplayPollInterval, 15000)),
+      output: String(requestOptions.presenceDisplayOutput || "HDMI-A-1").trim()
     } : null);
 
     function finalSend(devices) {
@@ -1452,6 +1467,172 @@ module.exports = NodeHelper.create({
     return now - monitor.belowSince >= monitor.config.belowDuration;
   },
 
+  configurePresenceDisplayMonitor: function (instanceId, config) {
+    var self = this;
+    var monitorId = String(instanceId || "__default");
+    var existing;
+    var configKey;
+
+    if (!this.presenceDisplayMonitors) {
+      this.presenceDisplayMonitors = {};
+    }
+    existing = this.presenceDisplayMonitors[monitorId];
+
+    if (!config || !config.enabled || !config.sensorName || !/^[A-Za-z0-9_.:-]+$/.test(config.output)) {
+      if (existing && existing.timer) {
+        clearTimeout(existing.timer);
+      }
+      delete this.presenceDisplayMonitors[monitorId];
+      return;
+    }
+
+    configKey = [
+      config.url,
+      config.username,
+      config.password,
+      config.verifySSL,
+      config.sensorName.toLowerCase(),
+      config.offDelay,
+      config.pollInterval,
+      config.output
+    ].join("\n");
+
+    if (existing && existing.configKey === configKey) {
+      return;
+    }
+
+    if (existing && existing.timer) {
+      clearTimeout(existing.timer);
+    }
+
+    this.presenceDisplayMonitors[monitorId] = {
+      config: config,
+      configKey: configKey,
+      absentSince: null,
+      displayOn: null,
+      changingPower: false,
+      timer: null
+    };
+
+    this.presenceDisplayMonitors[monitorId].timer = setTimeout(function () {
+      self.pollPresenceDisplayMonitor(monitorId);
+    }, 1000);
+
+    if (this.presenceDisplayMonitors[monitorId].timer.unref) {
+      this.presenceDisplayMonitors[monitorId].timer.unref();
+    }
+  },
+
+  schedulePresenceDisplayPoll: function (monitorId) {
+    var self = this;
+    var monitor = this.presenceDisplayMonitors[monitorId];
+
+    if (!monitor) {
+      return;
+    }
+
+    monitor.timer = setTimeout(function () {
+      self.pollPresenceDisplayMonitor(monitorId);
+    }, monitor.config.pollInterval);
+
+    if (monitor.timer.unref) {
+      monitor.timer.unref();
+    }
+  },
+
+  pollPresenceDisplayMonitor: function (monitorId) {
+    var self = this;
+    var monitor = this.presenceDisplayMonitors[monitorId];
+
+    if (!monitor || monitor.changingPower) {
+      return;
+    }
+
+    monitor.timer = null;
+    this.fetchHomebridgeOccupancyMap(
+      monitor.config.url,
+      monitor.config.username,
+      monitor.config.password,
+      monitor.config.verifySSL,
+      function (error, occupancyMap) {
+        var currentMonitor = self.presenceDisplayMonitors[monitorId];
+        var occupied;
+        var action;
+
+        if (!currentMonitor || currentMonitor !== monitor) {
+          return;
+        }
+
+        if (error) {
+          console.error("[MMM-GoveeSmartHomeStatus] Presence display monitor error:", error.message);
+          self.schedulePresenceDisplayPoll(monitorId);
+          return;
+        }
+
+        occupied = occupancyMap[String(monitor.config.sensorName).toLowerCase()];
+        if (typeof occupied === "undefined") {
+          console.error("[MMM-GoveeSmartHomeStatus] Presence sensor not found:", monitor.config.sensorName);
+          self.schedulePresenceDisplayPoll(monitorId);
+          return;
+        }
+
+        action = self.processPresenceDisplayReading(monitor, occupied, Date.now());
+        if (!action) {
+          self.schedulePresenceDisplayPoll(monitorId);
+          return;
+        }
+
+        monitor.changingPower = true;
+        self.setDisplayPower(monitor.config.output, action === "on", function (powerError) {
+          monitor.changingPower = false;
+          if (powerError) {
+            console.error("[MMM-GoveeSmartHomeStatus] Failed to turn display " + action + ":", powerError.message);
+          } else {
+            monitor.displayOn = action === "on";
+            console.log("[MMM-GoveeSmartHomeStatus] Turned display " + action + " from " + monitor.config.sensorName + " occupancy");
+          }
+          self.schedulePresenceDisplayPoll(monitorId);
+        });
+      },
+      monitor.config.allowDiscovery
+    );
+  },
+
+  processPresenceDisplayReading: function (monitor, occupied, now) {
+    if (occupied) {
+      monitor.absentSince = null;
+      return monitor.displayOn === true ? null : "on";
+    }
+
+    if (monitor.absentSince === null) {
+      monitor.absentSince = now;
+      return null;
+    }
+
+    if (monitor.displayOn !== false && now - monitor.absentSince >= monitor.config.offDelay) {
+      return "off";
+    }
+
+    return null;
+  },
+
+  setDisplayPower: function (output, enabled, callback) {
+    var uid = typeof process.getuid === "function" ? process.getuid() : 1000;
+    var environment = Object.assign({}, process.env, {
+      XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || "/run/user/" + uid,
+      WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY || "wayland-0"
+    });
+
+    childProcess.execFile(
+      "/usr/bin/wlr-randr",
+      ["--output", output, enabled ? "--on" : "--off"],
+      { env: environment, timeout: 10000 },
+      function (error) {
+        callback(error || null);
+      }
+    );
+  },
+
   withHomebridgePower: function (url, username, password, verifySSL, devices, callback, allowDiscovery) {
     var self = this;
 
@@ -1545,6 +1726,46 @@ module.exports = NodeHelper.create({
 
         self.homebridgeFallbackUrls[url] = discoveredUrl;
         console.warn("[MMM-GoveeSmartHomeStatus] Homebridge hostname could not resolve; using discovered endpoint " + discoveredUrl);
+        fetchAtUrl(discoveredUrl, callback);
+      });
+    });
+  },
+
+  fetchHomebridgeOccupancyMap: function (url, username, password, verifySSL, callback, allowDiscovery) {
+    var self = this;
+    var fallbackUrl = allowDiscovery === false ? null : this.homebridgeFallbackUrls[url];
+
+    function fetchAtUrl(targetUrl, done) {
+      self.withHomebridgeToken(targetUrl, username, password, verifySSL, function (tokenError, token) {
+        if (tokenError) {
+          done(tokenError, null);
+          return;
+        }
+
+        self.fetchHomebridgeAccessories(targetUrl, token, verifySSL, done, function (accessories) {
+          return self.buildHomebridgeOccupancyMap(accessories);
+        }, username);
+      });
+    }
+
+    if (fallbackUrl) {
+      fetchAtUrl(fallbackUrl, callback);
+      return;
+    }
+
+    fetchAtUrl(url, function (error, occupancyMap) {
+      if (!self.isHomebridgeDnsError(error) || allowDiscovery === false) {
+        callback(error, occupancyMap);
+        return;
+      }
+
+      self.discoverHomebridgeUrl(url, function (discoveryError, discoveredUrl) {
+        if (discoveryError || !discoveredUrl) {
+          callback(error, null);
+          return;
+        }
+
+        self.homebridgeFallbackUrls[url] = discoveredUrl;
         fetchAtUrl(discoveredUrl, callback);
       });
     });
@@ -1914,6 +2135,39 @@ module.exports = NodeHelper.create({
     }.bind(this));
 
     return outletMap;
+  },
+
+  buildHomebridgeOccupancyMap: function (accessories) {
+    var occupancyMap = {};
+
+    (Array.isArray(accessories) ? accessories : []).forEach(function (accessory) {
+      var characteristics = Array.isArray(accessory.serviceCharacteristics)
+        ? accessory.serviceCharacteristics
+        : [];
+      var occupancyCharacteristic = characteristics.find(function (characteristic) {
+        return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_OCCUPANCY_UUID;
+      });
+      var names;
+
+      if (!occupancyCharacteristic) {
+        return;
+      }
+
+      names = [
+        accessory.accessoryInformation && accessory.accessoryInformation.Name,
+        occupancyCharacteristic.serviceName
+      ];
+
+      names.forEach(function (name) {
+        var normalizedName = String(name || "").trim().toLowerCase();
+
+        if (normalizedName) {
+          occupancyMap[normalizedName] = Number(occupancyCharacteristic.value) === 1;
+        }
+      });
+    });
+
+    return occupancyMap;
   },
 
   setHomebridgeOutletState: function (url, username, password, verifySSL, uniqueId, characteristicType, value, callback, allowDiscovery) {
