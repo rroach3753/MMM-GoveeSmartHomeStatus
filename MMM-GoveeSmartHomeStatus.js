@@ -3,7 +3,6 @@
 Module.register("MMM-GoveeSmartHomeStatus", {
   defaults: {
     title: "Govee Devices",
-    apiKey: "",
     refreshInterval: 480000,
     showOnlineOnly: false,
     showPower: true,
@@ -35,10 +34,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     loadingMessage: "Loading Govee devices...",
     noApiKeyMessage: "API key not configured.",
     errorMessage: "Error fetching Govee device data.",
-    homebridgeUrl: "",
-    homebridgeUsername: "",
-    homebridgePassword: "",
-    homebridgeVerifySSL: true,
     showPowerConsumption: true,
     homebridgeAutoOffEnabled: true,
     homebridgeAutoOffDeviceName: "eBike - Pro",
@@ -75,7 +70,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
     this.sendSocketNotification("GOVEE_DEVICES_REQUEST", {
       instanceId: this.instanceId,
-      apiKey: this.config.apiKey,
       enableLanControl: this.config.enableLanControl,
       lanOnly: this.config.lanOnly,
       lanDiscoveryTimeout: this.config.lanDiscoveryTimeout,
@@ -83,10 +77,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       lanStaticDevices: this.config.lanStaticDevices,
       cloudDeviceListRefreshInterval: this.config.cloudDeviceListRefreshInterval,
       cloudDeviceStateRefreshInterval: this.config.cloudDeviceStateRefreshInterval,
-      homebridgeUrl: this.config.homebridgeUrl,
-      homebridgeUsername: this.config.homebridgeUsername,
-      homebridgePassword: this.config.homebridgePassword,
-      homebridgeVerifySSL: this.config.homebridgeVerifySSL,
       homebridgeAutoOffEnabled: this.config.homebridgeAutoOffEnabled,
       homebridgeAutoOffDeviceName: this.config.homebridgeAutoOffDeviceName,
       homebridgeAutoOffThresholdWatts: this.config.homebridgeAutoOffThresholdWatts,

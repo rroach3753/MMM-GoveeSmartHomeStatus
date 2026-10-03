@@ -6,6 +6,15 @@
 
 - Prevented grouped compact cards from extending off-screen without making the full-width bottom bar excessively tall
 
+### Security
+
+- Required HTTPS for Homebridge origins so credentials and bearer tokens cannot be transmitted over plaintext HTTP
+- Made `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` server-only environment settings; renderer-supplied secrets are ignored and no longer sent over the module socket
+
+### Changed
+
+- Existing installations must move Govee and Homebridge credentials from `config.js` to the MagicMirror process environment
+
 ## [1.4.1] - 2026-09-30
 
 ### Fixed

@@ -131,12 +131,11 @@ Fallback behavior:
 1. Create or sign in to your Govee account at [https://www.govee.com/](https://www.govee.com/).
 2. Go to the Govee developer portal at [https://developer.govee.com/](https://developer.govee.com/) and apply for Open API access.
 3. After approval, create/generate your API key from your Govee developer settings.
-4. Add the key to your MagicMirror module config:
+4. Set the key in the environment used to start MagicMirror:
 
-```javascript
-config: {
-   apiKey: "YOUR_GOVEE_API_KEY"
-}
+```bash
+export GOVEE_API_KEY="YOUR_GOVEE_API_KEY"
+npm start
 ```
 
 ### Alternative: get API key in the Govee mobile app
@@ -148,7 +147,7 @@ If you prefer, you can request/generate your API key directly in the Govee app:
 3. Open **About Us**.
 4. Tap **Apply for API Key** (or **Request API Key**, depending on app version).
 5. Submit the request and copy the generated key once approved/available.
-6. Paste that key into your module config (`apiKey: "YOUR_GOVEE_API_KEY"`).
+6. Set the key as `GOVEE_API_KEY` in the MagicMirror process environment.
 
 If you do not see the API key option in-app, update the app to the latest version and check the developer portal method above.
 
@@ -165,10 +164,7 @@ Add this module block to your MagicMirror `config/config.js` file to get started
 ```javascript
 {
   module: "MMM-GoveeSmartHomeStatus",
-  position: "top_right",
-  config: {
-      apiKey: "YOUR_GOVEE_API_KEY"
-  }
+  position: "top_right"
 },
 ```
 
@@ -178,7 +174,6 @@ Then restart MagicMirror.
 
 | Option | Type | Description | Default |
 | -------- | ------ | ------------- | --------- |
-| `apiKey` | String | Your Govee API key (required) | `""` |
 | `title` | String | Module title | `"Govee Devices"` |
 | `refreshInterval` | Number | Refresh interval in milliseconds (0 to disable) | `480000` |
 | `showOnlineOnly` | Boolean | Show only devices currently reporting online | `false` |
@@ -211,10 +206,6 @@ Then restart MagicMirror.
 | `noApiKeyMessage` | String | Message when API key not configured | `"API key not configured."` |
 | `errorMessage` | String | Error message | `"Error fetching Govee device data."` |
 | `fullWidthBottomBar` | Boolean | Span full width of bottom_bar position | `false` |
-| `homebridgeUrl` | String | Homebridge config-ui-x HTTP(S) origin. It must exactly match server-side `HOMEBRIDGE_URL` or an entry in `HOMEBRIDGE_ALLOWED_ORIGINS`. Leave empty to disable. | `""` |
-| `homebridgeUsername` | String | Homebridge UI username | `""` |
-| `homebridgePassword` | String | Homebridge UI password | `""` |
-| `homebridgeVerifySSL` | Boolean | Verify Homebridge HTTPS certificates. Set to `false` only as an explicit opt-out for a trusted self-signed installation. | `true` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
 | `homebridgeAutoOffEnabled` | Boolean | Monitor the configured Homebridge outlet locally and turn it off after sustained low power | `true` |
 | `homebridgeAutoOffDeviceName` | String | Exact Homebridge accessory, service, or Govee device name to monitor (case-insensitive) | `"eBike - Pro"` |
@@ -230,11 +221,9 @@ Then restart MagicMirror.
 
 ## Security
 
-Keep secrets out of browser-side `config.js` by setting `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment. `HOMEBRIDGE_URL` must be an HTTP(S) origin without a path, query, fragment, or embedded credentials and is required when server-side Homebridge credentials are used. Server-side values take precedence over configured values, and renderer-provided Homebridge origins are ignored when server credentials are configured.
+Secrets are server-only. Set `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment; values placed in browser-side `config.js` are ignored. `HOMEBRIDGE_URL` must be an HTTPS origin without a path, query, fragment, or embedded credentials. Plaintext HTTP origins are rejected so Homebridge credentials and bearer tokens cannot cross the network unencrypted.
 
-Renderer-provided URLs are not trusted network destinations. If credentials remain in `config.js`, set `HOMEBRIDGE_URL` on the MagicMirror server to the same exact origin, or set `HOMEBRIDGE_ALLOWED_ORIGINS` to a comma-separated exact allowlist such as `http://192.168.1.50:8581,https://homebridge.local:8581`. This explicit server-side trust is required for all destinations, including loopback, private-network, link-local, and cloud metadata addresses. Paths, queries, fragments, and embedded URL credentials are rejected. Automatic Bonjour fallback is disabled for renderer configuration because a discovered IP would not be an exact allowlist match.
-
-Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. When Homebridge credentials are supplied through the server environment, a trusted self-signed local installation can explicitly set `HOMEBRIDGE_VERIFY_SSL=false`. For renderer-supplied credentials, use `homebridgeVerifySSL: false`. Disabling verification permits interception of Homebridge credentials and access tokens and should be limited to a trusted local network.
+Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. A trusted self-signed local installation can explicitly set `HOMEBRIDGE_VERIFY_SSL=false`, but using a trusted private CA is strongly preferred because disabling verification permits interception of Homebridge credentials and access tokens.
 
 ## Usage Examples
 
@@ -245,7 +234,6 @@ Homebridge HTTPS certificate verification is enabled by default. For a private c
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       title: "Govee Devices"
    }
 },
@@ -260,7 +248,6 @@ Grouped compact cards use two dense rows in the full-width bottom bar. Room sect
    module: "MMM-GoveeSmartHomeStatus",
    position: "bottom_bar",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       fullWidthBottomBar: true,
       showTemperature: false,
       showHumidity: false
@@ -275,7 +262,6 @@ Grouped compact cards use two dense rows in the full-width bottom bar. Room sect
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       showLightsSummary: false,
       showRoomSummary: false,
       hideAppliances: false
@@ -290,7 +276,6 @@ Grouped compact cards use two dense rows in the full-width bottom bar. Room sect
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       enableLanControl: true,
       lanOnly: false,
       lanDiscoveryTimeout: 4000
@@ -321,7 +306,6 @@ Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you wan
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       refreshInterval: 120000,                 // Module refresh every 2 minutes
       enableLanControl: true,
       lanOnly: false,
@@ -340,7 +324,6 @@ With segmented refresh enabled, set `refreshInterval` to your fastest desired up
    module: "MMM-GoveeSmartHomeStatus",
    position: "bottom_bar",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       compactCards: true,
       maxCompactCards: 30,
       showRoomSummary: true,
@@ -365,7 +348,6 @@ This profile keeps local card responsiveness high while reducing cloud API calls
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       enableLanControl: true,
       lanOnly: false,
       lanDiscoveryTimeout: 5000,
@@ -405,7 +387,6 @@ When `maxCompactCards` is lower than the device count, selection rotates across 
    module: "MMM-GoveeSmartHomeStatus",
    position: "bottom_bar",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       compactCards: true,
       fullWidthBottomBar: true,
       maxCompactCards: 40,
@@ -432,7 +413,9 @@ The module matches Homebridge accessories to Govee devices by device ID, with a 
 Trust the exact local origin on the MagicMirror server before using renderer-side Homebridge credentials:
 
 ```bash
-export HOMEBRIDGE_URL="http://192.168.1.50:8581"
+export HOMEBRIDGE_URL="https://192.168.1.50:8581"
+export HOMEBRIDGE_USERNAME="admin"
+export HOMEBRIDGE_PASSWORD="yourpassword"
 ```
 
 ```javascript
@@ -440,11 +423,6 @@ export HOMEBRIDGE_URL="http://192.168.1.50:8581"
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
-      homebridgeUrl: "http://192.168.1.50:8581",
-      homebridgeUsername: "admin",
-      homebridgePassword: "yourpassword",
-      homebridgeVerifySSL: true,
       showPowerConsumption: true,
       homebridgeAutoOffEnabled: true
    }
@@ -492,7 +470,6 @@ The module classifies a device as a light when its name, type, or model contains
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       lightDetectionKeywords: ["light", "lamp", "bulb", "strip", "led", "sconce", "can", "uplight"]
    }
 },
@@ -505,7 +482,6 @@ The module classifies a device as a light when its name, type, or model contains
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       lightDetectionKeywords: ["bulb", "strip"]
    }
 },
@@ -604,7 +580,6 @@ Backward compatibility note: if both `cloudDeviceListRefreshInterval` and `cloud
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       refreshInterval: 600000,                // UI refresh every 10 minutes
       enableLanControl: true,
       lanOnly: false,
@@ -623,7 +598,6 @@ This keeps the display responsive without hammering the cloud API. With 25 devic
    module: "MMM-GoveeSmartHomeStatus",
    position: "top_right",
    config: {
-      apiKey: "YOUR_GOVEE_API_KEY",
       refreshInterval: 300000,                // UI refresh every 5 minutes
       enableLanControl: true,
       lanOnly: false,

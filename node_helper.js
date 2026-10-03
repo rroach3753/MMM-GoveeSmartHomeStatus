@@ -50,8 +50,8 @@ module.exports = NodeHelper.create({
   fetchGoveeDevices: function (requestOptions) {
     var self = this;
     var instanceId = requestOptions.instanceId || null;
-    var homebridgeConfig = this.resolveHomebridgeConfig(requestOptions);
-    var apiKey = process.env.GOVEE_API_KEY || requestOptions.apiKey;
+    var homebridgeConfig = this.resolveHomebridgeConfig();
+    var apiKey = String(process.env.GOVEE_API_KEY || "").trim();
     var enableLanControl = requestOptions.enableLanControl === true;
     var lanOnly = requestOptions.lanOnly === true;
     var lanDiscoveryTimeout = Number(requestOptions.lanDiscoveryTimeout) || 4000;
@@ -62,7 +62,7 @@ module.exports = NodeHelper.create({
     var homebridgeUrl = homebridgeConfig.url;
     var homebridgeUsername = homebridgeConfig.username;
     var homebridgePassword = homebridgeConfig.password;
-    var homebridgeVerifySSL = this.resolveHomebridgeVerifySSL(requestOptions);
+    var homebridgeVerifySSL = this.resolveHomebridgeVerifySSL();
     var hasHomebridge = !!(homebridgeUrl && homebridgeUsername);
 
     if (homebridgeConfig.error) {
@@ -167,16 +167,12 @@ module.exports = NodeHelper.create({
     sendCloudData();
   },
 
-  resolveHomebridgeConfig: function (requestOptions) {
-    var options = requestOptions || {};
-    var requestedUrl = String(options.homebridgeUrl || "").trim();
+  resolveHomebridgeConfig: function () {
     var serverUsername = String(process.env.HOMEBRIDGE_USERNAME || "").trim();
     var serverPassword = String(process.env.HOMEBRIDGE_PASSWORD || "");
     var serverUrl = String(process.env.HOMEBRIDGE_URL || "").trim();
-    var hasServerCredentials = !!(serverUsername || serverPassword);
+    var hasServerConfig = !!(serverUrl || serverUsername || serverPassword);
     var canonicalServerUrl;
-    var canonicalRequestedUrl;
-    var trustedOrigins;
 
     try {
       canonicalServerUrl = serverUrl ? this.canonicalizeHomebridgeOrigin(serverUrl) : "";
@@ -186,130 +182,64 @@ module.exports = NodeHelper.create({
         username: "",
         password: "",
         allowDiscovery: false,
-        error: "HOMEBRIDGE_URL must be a valid HTTP(S) origin without a path, query, or credentials."
+        error: "HOMEBRIDGE_URL must be a valid HTTPS origin without a path, query, or credentials."
       };
     }
 
-    if (hasServerCredentials) {
-      if (!serverUrl) {
-        return {
-          url: "",
-          username: "",
-          password: "",
-          allowDiscovery: false,
-          error: "HOMEBRIDGE_URL is required when server-side Homebridge credentials are configured."
-        };
-      }
-
-      if (!serverUsername) {
-        return {
-          url: "",
-          username: "",
-          password: "",
-          allowDiscovery: false,
-          error: "HOMEBRIDGE_USERNAME is required when server-side Homebridge credentials are configured."
-        };
-      }
-
-      return {
-        url: canonicalServerUrl,
-        username: serverUsername,
-        password: serverPassword,
-        allowDiscovery: false,
-        error: null
-      };
-    }
-
-    if (!requestedUrl) {
-      return {
-        url: "",
-        username: String(options.homebridgeUsername || "").trim(),
-        password: String(options.homebridgePassword || ""),
-        allowDiscovery: false,
-        error: null
-      };
-    }
-
-    try {
-      canonicalRequestedUrl = this.canonicalizeHomebridgeOrigin(requestedUrl);
-      trustedOrigins = this.getTrustedHomebridgeOrigins(canonicalServerUrl);
-    } catch (error) {
+    if (!hasServerConfig) {
       return {
         url: "",
         username: "",
         password: "",
         allowDiscovery: false,
-        error: error.message
+        error: null
       };
     }
 
-    if (!trustedOrigins.has(canonicalRequestedUrl)) {
+    if (!serverUrl) {
       return {
         url: "",
         username: "",
         password: "",
         allowDiscovery: false,
-        error: "homebridgeUrl must exactly match HOMEBRIDGE_URL or an origin in HOMEBRIDGE_ALLOWED_ORIGINS."
+        error: "HOMEBRIDGE_URL is required when server-side Homebridge credentials are configured."
+      };
+    }
+
+    if (!serverUsername) {
+      return {
+        url: "",
+        username: "",
+        password: "",
+        allowDiscovery: false,
+        error: "HOMEBRIDGE_USERNAME is required when Homebridge integration is configured."
       };
     }
 
     return {
-      url: canonicalRequestedUrl,
-      username: String(options.homebridgeUsername || "").trim(),
-      password: String(options.homebridgePassword || ""),
+      url: canonicalServerUrl,
+      username: serverUsername,
+      password: serverPassword,
       allowDiscovery: false,
       error: null
     };
   },
 
-  resolveHomebridgeVerifySSL: function (requestOptions) {
-    var hasServerCredentials = !!String(
-      process.env.HOMEBRIDGE_USERNAME || process.env.HOMEBRIDGE_PASSWORD || ""
-    ).trim();
-
-    if (hasServerCredentials) {
-      return this.normalizeBoolean(process.env.HOMEBRIDGE_VERIFY_SSL, true);
-    }
-
-    return this.normalizeBoolean(requestOptions && requestOptions.homebridgeVerifySSL, true);
+  resolveHomebridgeVerifySSL: function () {
+    return this.normalizeBoolean(process.env.HOMEBRIDGE_VERIFY_SSL, true);
   },
 
   canonicalizeHomebridgeOrigin: function (urlValue) {
     var parsedUrl = new URL(String(urlValue || "").trim());
 
-    if (!["http:", "https:"].includes(parsedUrl.protocol) ||
+    if (parsedUrl.protocol !== "https:" ||
         parsedUrl.username || parsedUrl.password ||
         (parsedUrl.pathname && parsedUrl.pathname !== "/") ||
         parsedUrl.search || parsedUrl.hash) {
-      throw new Error("Homebridge URLs must be valid HTTP(S) origins without a path, query, fragment, or credentials.");
+      throw new Error("Homebridge URLs must be valid HTTPS origins without a path, query, fragment, or credentials.");
     }
 
     return parsedUrl.origin;
-  },
-
-  getTrustedHomebridgeOrigins: function (canonicalServerUrl) {
-    var self = this;
-    var trustedOrigins = new Set();
-    var configuredOrigins = String(process.env.HOMEBRIDGE_ALLOWED_ORIGINS || "")
-      .split(",")
-      .map(function (origin) {
-        return origin.trim();
-      })
-      .filter(Boolean);
-
-    if (canonicalServerUrl) {
-      trustedOrigins.add(canonicalServerUrl);
-    }
-
-    configuredOrigins.forEach(function (origin) {
-      try {
-        trustedOrigins.add(self.canonicalizeHomebridgeOrigin(origin));
-      } catch {
-        throw new Error("HOMEBRIDGE_ALLOWED_ORIGINS must contain only comma-separated HTTP(S) origins without paths, queries, fragments, or credentials.");
-      }
-    });
-
-    return trustedOrigins;
   },
 
   normalizeRefreshInterval: function (value) {

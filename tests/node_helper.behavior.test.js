@@ -64,7 +64,7 @@ function loadFrontendModule() {
 test("frontend continues retrying after more than three connection failures", () => {
   const { definition, timers } = loadFrontendModule();
   const moduleInstance = Object.assign({}, definition, {
-    config: Object.assign({}, definition.defaults, { apiKey: "test-key" }),
+    config: Object.assign({}, definition.defaults),
     identifier: "test-instance",
     sendSocketNotification() {},
     updateDom() {}
@@ -88,13 +88,15 @@ test("frontend continues retrying after more than three connection failures", ()
   assert.ok(timers.has(moduleInstance.configRetryTimer));
 });
 
-test("frontend defaults Homebridge TLS verification on while preserving auto-off defaults", () => {
+test("frontend omits all server-only secrets while preserving auto-off defaults", () => {
   const { definition } = loadFrontendModule();
   let requestPayload;
   const moduleInstance = Object.assign({}, definition, {
     config: Object.assign({}, definition.defaults, {
-      apiKey: "test-key",
-      homebridgeUrl: "https://homebridge.local:8581"
+      apiKey: "renderer-key",
+      homebridgeUrl: "https://attacker.example",
+      homebridgeUsername: "renderer-user",
+      homebridgePassword: "renderer-password"
     }),
     identifier: "test-instance",
     sendSocketNotification(notification, payload) {
@@ -107,7 +109,11 @@ test("frontend defaults Homebridge TLS verification on while preserving auto-off
 
   moduleInstance.start();
 
-  assert.equal(requestPayload.homebridgeVerifySSL, true);
+  assert.equal(Object.hasOwn(requestPayload, "apiKey"), false);
+  assert.equal(Object.hasOwn(requestPayload, "homebridgeUrl"), false);
+  assert.equal(Object.hasOwn(requestPayload, "homebridgeUsername"), false);
+  assert.equal(Object.hasOwn(requestPayload, "homebridgePassword"), false);
+  assert.equal(Object.hasOwn(requestPayload, "homebridgeVerifySSL"), false);
   assert.equal(requestPayload.homebridgeAutoOffEnabled, true);
   assert.equal(requestPayload.homebridgeAutoOffDeviceName, "eBike - Pro");
 });
@@ -115,7 +121,7 @@ test("frontend defaults Homebridge TLS verification on while preserving auto-off
 test("frontend waits for server data when the API key is environment-only", () => {
   const { definition } = loadFrontendModule();
   const moduleInstance = Object.assign({}, definition, {
-    config: Object.assign({}, definition.defaults, { apiKey: "" }),
+    config: Object.assign({}, definition.defaults),
     dataState: {
       devices: [],
       fetchedAt: null,
@@ -338,10 +344,10 @@ test("server Homebridge TLS verification uses the server environment", () => {
 
   try {
     delete process.env.HOMEBRIDGE_VERIFY_SSL;
-    assert.equal(helper.resolveHomebridgeVerifySSL({ homebridgeVerifySSL: false }), true);
+    assert.equal(helper.resolveHomebridgeVerifySSL(), true);
 
     process.env.HOMEBRIDGE_VERIFY_SSL = " false\r";
-    assert.equal(helper.resolveHomebridgeVerifySSL({ homebridgeVerifySSL: true }), false);
+    assert.equal(helper.resolveHomebridgeVerifySSL(), false);
   } finally {
     Object.entries(previousValues).forEach(([name, value]) => {
       if (value === undefined) {
@@ -353,52 +359,29 @@ test("server Homebridge TLS verification uses the server environment", () => {
   }
 });
 
-test("renderer Homebridge origins require an exact server allowlist match", () => {
+test("renderer Homebridge settings are ignored when server integration is not configured", () => {
   const previousValues = {
     HOMEBRIDGE_URL: process.env.HOMEBRIDGE_URL,
     HOMEBRIDGE_USERNAME: process.env.HOMEBRIDGE_USERNAME,
-    HOMEBRIDGE_PASSWORD: process.env.HOMEBRIDGE_PASSWORD,
-    HOMEBRIDGE_ALLOWED_ORIGINS: process.env.HOMEBRIDGE_ALLOWED_ORIGINS
+    HOMEBRIDGE_PASSWORD: process.env.HOMEBRIDGE_PASSWORD
   };
   delete process.env.HOMEBRIDGE_URL;
   delete process.env.HOMEBRIDGE_USERNAME;
   delete process.env.HOMEBRIDGE_PASSWORD;
-  delete process.env.HOMEBRIDGE_ALLOWED_ORIGINS;
 
   try {
-    const metadataConfig = helper.resolveHomebridgeConfig({
-      homebridgeUrl: "http://169.254.169.254",
-      homebridgeUsername: "renderer-user"
-    });
-    assert.match(metadataConfig.error, /must exactly match/);
-    assert.equal(metadataConfig.url, "");
-
-    process.env.HOMEBRIDGE_ALLOWED_ORIGINS = "http://127.0.0.1:8581, https://Homebridge.Local:8581/";
-    const loopbackConfig = helper.resolveHomebridgeConfig({
-      homebridgeUrl: "http://127.0.0.1:8581",
-      homebridgeUsername: "renderer-user"
-    });
-    assert.equal(loopbackConfig.url, "http://127.0.0.1:8581");
-    assert.equal(loopbackConfig.error, null);
-
-    const localConfig = helper.resolveHomebridgeConfig({
+    const config = helper.resolveHomebridgeConfig({
       homebridgeUrl: "https://homebridge.local:8581",
       homebridgeUsername: "renderer-user",
       homebridgePassword: "renderer-password"
     });
-    assert.deepEqual(localConfig, {
-      url: "https://homebridge.local:8581",
-      username: "renderer-user",
-      password: "renderer-password",
+    assert.deepEqual(config, {
+      url: "",
+      username: "",
+      password: "",
       allowDiscovery: false,
       error: null
     });
-
-    const pathConfig = helper.resolveHomebridgeConfig({
-      homebridgeUrl: "https://homebridge.local:8581/admin",
-      homebridgeUsername: "renderer-user"
-    });
-    assert.match(pathConfig.error, /without a path/);
   } finally {
     Object.entries(previousValues).forEach(([name, value]) => {
       if (value === undefined) {
@@ -685,11 +668,11 @@ test("presence display waits five minutes to turn off and wakes immediately", ()
 });
 
 test("Homebridge characteristic writer sends outlet off command", async () => {
-  const originalRequest = http.request;
+  const originalRequest = https.request;
   let requestOptions;
   let requestBody;
 
-  http.request = (options, responseCallback) => {
+  https.request = (options, responseCallback) => {
     const request = new EventEmitter();
     request.write = (body) => {
       requestBody = body;
@@ -708,9 +691,9 @@ test("Homebridge characteristic writer sends outlet off command", async () => {
   try {
     await new Promise((resolve, reject) => {
       helper.writeHomebridgeCharacteristic(
-        "http://homebridge.local:8581",
+        "https://homebridge.local:8581",
         "test-token",
-        false,
+        true,
         "outlet-service-id",
         "On",
         false,
@@ -723,14 +706,15 @@ test("Homebridge characteristic writer sends outlet off command", async () => {
     assert.equal(requestOptions.headers.Authorization, "Bearer test-token");
     assert.equal(requestBody, '{"characteristicType":"On","value":false}');
   } finally {
-    http.request = originalRequest;
+    https.request = originalRequest;
   }
 });
 
-test("server Govee API key takes precedence over renderer config", () => {
+test("Govee API key is accepted only from the server environment", () => {
   const previousApiKey = process.env.GOVEE_API_KEY;
   const originalFetch = helper.fetchCloudDevicesSegmented;
   const originalSend = helper.sendDevicesData;
+  const originalSendError = helper.sendDevicesError;
   let receivedApiKey;
 
   process.env.GOVEE_API_KEY = "server-key";
@@ -743,9 +727,18 @@ test("server Govee API key takes precedence over renderer config", () => {
   try {
     helper.fetchGoveeDevices({ apiKey: "renderer-key" });
     assert.equal(receivedApiKey, "server-key");
+
+    delete process.env.GOVEE_API_KEY;
+    let errorMessage;
+    helper.sendDevicesError = (message) => {
+      errorMessage = message;
+    };
+    helper.fetchGoveeDevices({ apiKey: "renderer-key" });
+    assert.match(errorMessage, /API key is required/);
   } finally {
     helper.fetchCloudDevicesSegmented = originalFetch;
     helper.sendDevicesData = originalSend;
+    helper.sendDevicesError = originalSendError;
     if (previousApiKey === undefined) {
       delete process.env.GOVEE_API_KEY;
     } else {
