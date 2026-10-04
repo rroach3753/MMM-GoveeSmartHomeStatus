@@ -23,6 +23,52 @@ Module._load = function (request, parent, isMain) {
 const helper = require("../node_helper");
 Module._load = originalLoad;
 
+const SERVER_AUTOMATION_ENV_NAMES = [
+  "HOMEBRIDGE_URL",
+  "HOMEBRIDGE_USERNAME",
+  "HOMEBRIDGE_PASSWORD",
+  "HOMEBRIDGE_VERIFY_SSL",
+  "HOMEBRIDGE_AUTO_OFF_ENABLED",
+  "HOMEBRIDGE_AUTO_OFF_DEVICE_NAME",
+  "HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS",
+  "HOMEBRIDGE_AUTO_OFF_ARM_WATTS",
+  "HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS",
+  "HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS",
+  "PRESENCE_DISPLAY_CONTROL_ENABLED",
+  "PRESENCE_DISPLAY_SENSOR_NAME",
+  "PRESENCE_DISPLAY_OFF_DELAY_MS",
+  "PRESENCE_DISPLAY_POLL_INTERVAL_MS",
+  "PRESENCE_DISPLAY_OUTPUT"
+];
+
+function replaceServerAutomationEnvironment(values) {
+  const previousValues = Object.fromEntries(
+    SERVER_AUTOMATION_ENV_NAMES.map((name) => [name, process.env[name]])
+  );
+
+  SERVER_AUTOMATION_ENV_NAMES.forEach((name) => delete process.env[name]);
+  Object.entries(values || {}).forEach(([name, value]) => {
+    process.env[name] = value;
+  });
+
+  return function restore() {
+    Object.entries(previousValues).forEach(([name, value]) => {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    });
+  };
+}
+
+function clearAutomationMonitors() {
+  Object.values(helper.homebridgeAutoOffMonitors || {}).forEach((monitor) => clearTimeout(monitor.timer));
+  Object.values(helper.presenceDisplayMonitors || {}).forEach((monitor) => clearTimeout(monitor.timer));
+  helper.homebridgeAutoOffMonitors = {};
+  helper.presenceDisplayMonitors = {};
+}
+
 function loadFrontendModule() {
   const source = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.js"), "utf8");
   let definition;
@@ -87,7 +133,7 @@ test("frontend continues retrying after more than three connection failures", ()
   assert.ok(timers.has(moduleInstance.configRetryTimer));
 });
 
-test("frontend omits all server-only secrets while preserving auto-off defaults", () => {
+test("frontend request omits all server-only secrets and automation policy", () => {
   const { definition } = loadFrontendModule();
   let requestPayload;
   const moduleInstance = Object.assign({}, definition, {
@@ -95,7 +141,18 @@ test("frontend omits all server-only secrets while preserving auto-off defaults"
       apiKey: "renderer-key",
       homebridgeUrl: "https://attacker.example",
       homebridgeUsername: "renderer-user",
-      homebridgePassword: "renderer-password"
+      homebridgePassword: "renderer-password",
+      homebridgeAutoOffEnabled: true,
+      homebridgeAutoOffDeviceName: "Attacker Outlet",
+      homebridgeAutoOffThresholdWatts: 999,
+      homebridgeAutoOffArmWatts: 1000,
+      homebridgeAutoOffBelowDuration: 1,
+      homebridgeAutoOffPollInterval: 1,
+      presenceDisplayControlEnabled: true,
+      presenceDisplaySensorName: "Attacker Sensor",
+      presenceDisplayOffDelay: 1,
+      presenceDisplayPollInterval: 1,
+      presenceDisplayOutput: "ATTACKER-1"
     }),
     identifier: "test-instance",
     sendSocketNotification(notification, payload) {
@@ -113,8 +170,19 @@ test("frontend omits all server-only secrets while preserving auto-off defaults"
   assert.equal(Object.hasOwn(requestPayload, "homebridgeUsername"), false);
   assert.equal(Object.hasOwn(requestPayload, "homebridgePassword"), false);
   assert.equal(Object.hasOwn(requestPayload, "homebridgeVerifySSL"), false);
-  assert.equal(requestPayload.homebridgeAutoOffEnabled, true);
-  assert.equal(requestPayload.homebridgeAutoOffDeviceName, "eBike - Pro");
+  [
+    "homebridgeAutoOffEnabled",
+    "homebridgeAutoOffDeviceName",
+    "homebridgeAutoOffThresholdWatts",
+    "homebridgeAutoOffArmWatts",
+    "homebridgeAutoOffBelowDuration",
+    "homebridgeAutoOffPollInterval",
+    "presenceDisplayControlEnabled",
+    "presenceDisplaySensorName",
+    "presenceDisplayOffDelay",
+    "presenceDisplayPollInterval",
+    "presenceDisplayOutput"
+  ].forEach((name) => assert.equal(Object.hasOwn(requestPayload, name), false));
 });
 
 test("frontend waits for server data when the API key is environment-only", () => {
@@ -664,6 +732,201 @@ test("presence display waits five minutes to turn off and wakes immediately", ()
   monitor.displayOn = false;
   assert.equal(helper.processPresenceDisplayReading(monitor, true, 302000), "on");
   assert.equal(monitor.absentSince, null);
+});
+
+test("malicious renderer automation settings cannot create privileged monitors", () => {
+  const restoreEnvironment = replaceServerAutomationEnvironment({
+    HOMEBRIDGE_URL: "https://trusted.example:8581",
+    HOMEBRIDGE_USERNAME: "server-user",
+    HOMEBRIDGE_PASSWORD: "server-password"
+  });
+  const previousApiKey = process.env.GOVEE_API_KEY;
+  const originalFetch = helper.fetchCloudDevicesSegmented;
+  const originalWithPower = helper.withHomebridgePower;
+  const originalSend = helper.sendDevicesData;
+  const originalSetOutlet = helper.setHomebridgeOutletState;
+  const originalSetDisplay = helper.setDisplayPower;
+  let outletWrites = 0;
+  let displayWrites = 0;
+
+  process.env.GOVEE_API_KEY = "server-key";
+  helper.fetchCloudDevicesSegmented = (apiKey, listInterval, stateInterval, callback) => callback(null, []);
+  helper.withHomebridgePower = (url, username, password, verifySSL, devices, callback) => callback(devices);
+  helper.sendDevicesData = () => {};
+  helper.setHomebridgeOutletState = () => {
+    outletWrites += 1;
+  };
+  helper.setDisplayPower = () => {
+    displayWrites += 1;
+  };
+
+  try {
+    clearAutomationMonitors();
+    helper.initializeServerAutomations();
+
+    ["attacker-one", "attacker-two"].forEach((instanceId) => {
+      helper.fetchGoveeDevices({
+        instanceId,
+        homebridgeAutoOffEnabled: true,
+        homebridgeAutoOffDeviceName: "Attacker Outlet",
+        homebridgeAutoOffThresholdWatts: 1000,
+        homebridgeAutoOffArmWatts: 1001,
+        homebridgeAutoOffBelowDuration: 1,
+        homebridgeAutoOffPollInterval: 1,
+        presenceDisplayControlEnabled: true,
+        presenceDisplaySensorName: "Attacker Sensor",
+        presenceDisplayOffDelay: 1,
+        presenceDisplayPollInterval: 1,
+        presenceDisplayOutput: "ATTACKER-1"
+      });
+    });
+
+    assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), []);
+    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), []);
+    assert.equal(outletWrites, 0);
+    assert.equal(displayWrites, 0);
+  } finally {
+    clearAutomationMonitors();
+    restoreEnvironment();
+    helper.fetchCloudDevicesSegmented = originalFetch;
+    helper.withHomebridgePower = originalWithPower;
+    helper.sendDevicesData = originalSend;
+    helper.setHomebridgeOutletState = originalSetOutlet;
+    helper.setDisplayPower = originalSetDisplay;
+    if (previousApiKey === undefined) {
+      delete process.env.GOVEE_API_KEY;
+    } else {
+      process.env.GOVEE_API_KEY = previousApiKey;
+    }
+  }
+});
+
+test("server automation policy is authoritative and uses singleton monitors", () => {
+  const restoreEnvironment = replaceServerAutomationEnvironment({
+    HOMEBRIDGE_URL: "https://trusted.example:8581",
+    HOMEBRIDGE_USERNAME: "server-user",
+    HOMEBRIDGE_PASSWORD: "server-password",
+    HOMEBRIDGE_AUTO_OFF_ENABLED: "true",
+    HOMEBRIDGE_AUTO_OFF_DEVICE_NAME: "Authorized Outlet",
+    HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS: "4.5",
+    HOMEBRIDGE_AUTO_OFF_ARM_WATTS: "22",
+    HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS: "240000",
+    HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS: "45000",
+    PRESENCE_DISPLAY_CONTROL_ENABLED: "true",
+    PRESENCE_DISPLAY_SENSOR_NAME: "Authorized Sensor",
+    PRESENCE_DISPLAY_OFF_DELAY_MS: "180000",
+    PRESENCE_DISPLAY_POLL_INTERVAL_MS: "20000",
+    PRESENCE_DISPLAY_OUTPUT: "DP-1"
+  });
+  const previousApiKey = process.env.GOVEE_API_KEY;
+  const originalSendError = helper.sendDevicesError;
+
+  delete process.env.GOVEE_API_KEY;
+  helper.sendDevicesError = () => {};
+
+  try {
+    clearAutomationMonitors();
+    helper.initializeServerAutomations();
+    ["attacker-one", "attacker-two"].forEach((instanceId) => {
+      helper.fetchGoveeDevices({
+        instanceId,
+        homebridgeAutoOffEnabled: true,
+        homebridgeAutoOffDeviceName: "Retargeted Outlet",
+        homebridgeAutoOffThresholdWatts: 999,
+        homebridgeAutoOffArmWatts: 1000,
+        homebridgeAutoOffBelowDuration: 1,
+        homebridgeAutoOffPollInterval: 1,
+        presenceDisplayControlEnabled: true,
+        presenceDisplaySensorName: "Retargeted Sensor",
+        presenceDisplayOffDelay: 1,
+        presenceDisplayPollInterval: 1,
+        presenceDisplayOutput: "RETARGETED-1"
+      });
+    });
+
+    assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), ["__server_homebridge_auto_off"]);
+    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), ["__server_presence_display"]);
+    assert.deepEqual(
+      {
+        deviceName: helper.homebridgeAutoOffMonitors.__server_homebridge_auto_off.config.deviceName,
+        thresholdWatts: helper.homebridgeAutoOffMonitors.__server_homebridge_auto_off.config.thresholdWatts,
+        armWatts: helper.homebridgeAutoOffMonitors.__server_homebridge_auto_off.config.armWatts,
+        belowDuration: helper.homebridgeAutoOffMonitors.__server_homebridge_auto_off.config.belowDuration,
+        pollInterval: helper.homebridgeAutoOffMonitors.__server_homebridge_auto_off.config.pollInterval
+      },
+      {
+        deviceName: "Authorized Outlet",
+        thresholdWatts: 4.5,
+        armWatts: 22,
+        belowDuration: 240000,
+        pollInterval: 45000
+      }
+    );
+    assert.deepEqual(
+      {
+        sensorName: helper.presenceDisplayMonitors.__server_presence_display.config.sensorName,
+        offDelay: helper.presenceDisplayMonitors.__server_presence_display.config.offDelay,
+        pollInterval: helper.presenceDisplayMonitors.__server_presence_display.config.pollInterval,
+        output: helper.presenceDisplayMonitors.__server_presence_display.config.output
+      },
+      {
+        sensorName: "Authorized Sensor",
+        offDelay: 180000,
+        pollInterval: 20000,
+        output: "DP-1"
+      }
+    );
+
+    helper.initializeServerAutomations();
+    assert.equal(Object.keys(helper.homebridgeAutoOffMonitors).length, 1);
+    assert.equal(Object.keys(helper.presenceDisplayMonitors).length, 1);
+  } finally {
+    clearAutomationMonitors();
+    restoreEnvironment();
+    helper.sendDevicesError = originalSendError;
+    if (previousApiKey === undefined) {
+      delete process.env.GOVEE_API_KEY;
+    } else {
+      process.env.GOVEE_API_KEY = previousApiKey;
+    }
+  }
+});
+
+test("incomplete or invalid enabled server automation policy fails closed", () => {
+  const restoreEnvironment = replaceServerAutomationEnvironment({
+    HOMEBRIDGE_URL: "https://trusted.example:8581",
+    HOMEBRIDGE_USERNAME: "server-user",
+    HOMEBRIDGE_PASSWORD: "server-password",
+    HOMEBRIDGE_AUTO_OFF_ENABLED: "true",
+    HOMEBRIDGE_AUTO_OFF_DEVICE_NAME: "Authorized Outlet",
+    HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS: "5",
+    HOMEBRIDGE_AUTO_OFF_ARM_WATTS: "4",
+    HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS: "300000",
+    HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS: "30000",
+    PRESENCE_DISPLAY_CONTROL_ENABLED: "true",
+    PRESENCE_DISPLAY_SENSOR_NAME: "Authorized Sensor",
+    PRESENCE_DISPLAY_OFF_DELAY_MS: "300000",
+    PRESENCE_DISPLAY_POLL_INTERVAL_MS: "15000",
+    PRESENCE_DISPLAY_OUTPUT: "../../unexpected"
+  });
+  const originalConsoleError = console.error;
+  const errors = [];
+
+  console.error = (...args) => errors.push(args.join(" "));
+
+  try {
+    clearAutomationMonitors();
+    helper.initializeServerAutomations();
+
+    assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), []);
+    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), []);
+    assert.ok(errors.some((message) => message.includes("ARM_WATTS")));
+    assert.ok(errors.some((message) => message.includes("PRESENCE_DISPLAY_OUTPUT")));
+  } finally {
+    console.error = originalConsoleError;
+    clearAutomationMonitors();
+    restoreEnvironment();
+  }
 });
 
 test("Homebridge characteristic writer sends outlet off command", async () => {

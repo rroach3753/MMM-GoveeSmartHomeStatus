@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.0.0] - 2026-10-04
 
 ### Fixed
 
@@ -10,10 +10,12 @@
 
 - Required HTTPS for Homebridge origins so credentials and bearer tokens cannot be transmitted over plaintext HTTP
 - Made `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` server-only environment settings; renderer-supplied secrets are ignored and no longer sent over the module socket
+- Moved Homebridge auto-off and presence/display enablement, targets, thresholds, timing, and display output to fail-closed server environment policy; renderer requests can no longer create or retarget privileged monitors
 
 ### Changed
 
 - Existing installations must move Govee and Homebridge credentials from `config.js` to the MagicMirror process environment
+- Homebridge auto-off now defaults to disabled; installations using either automation must migrate all former `config.js` automation settings to the documented server environment variables
 
 ## [1.4.1] - 2026-09-30
 

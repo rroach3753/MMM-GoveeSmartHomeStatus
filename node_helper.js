@@ -16,6 +16,8 @@ const MAX_RESPONSE_BYTES = 1048576;
 const HOMEBRIDGE_ON_UUID = "00000025-0000-1000-8000-0026BB765291";
 const HOMEBRIDGE_OCCUPANCY_UUID = "00000071-0000-1000-8000-0026BB765291";
 const HOMEBRIDGE_CURRENT_CONSUMPTION_UUID = "E863F10D-079E-48FF-8F27-9C2605A29F52";
+const SERVER_AUTO_OFF_MONITOR_ID = "__server_homebridge_auto_off";
+const SERVER_PRESENCE_MONITOR_ID = "__server_presence_display";
 
 module.exports = NodeHelper.create({
   start: function () {
@@ -25,6 +27,7 @@ module.exports = NodeHelper.create({
     this.homebridgeFallbackUrls = {};
     this.homebridgeAutoOffMonitors = {};
     this.presenceDisplayMonitors = {};
+    this.initializeServerAutomations();
   },
 
   sendDevicesData: function (devices, instanceId) {
@@ -69,32 +72,6 @@ module.exports = NodeHelper.create({
       this.sendDevicesError(homebridgeConfig.error, instanceId);
       return;
     }
-
-    this.configureHomebridgeAutoOff(instanceId, hasHomebridge ? {
-      url: homebridgeUrl,
-      username: homebridgeUsername,
-      password: homebridgePassword,
-      verifySSL: homebridgeVerifySSL,
-      allowDiscovery: homebridgeConfig.allowDiscovery,
-      enabled: this.normalizeBoolean(requestOptions.homebridgeAutoOffEnabled, true),
-      deviceName: String(requestOptions.homebridgeAutoOffDeviceName || "eBike - Pro").trim(),
-      thresholdWatts: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffThresholdWatts, 5),
-      armWatts: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffArmWatts, 20),
-      belowDuration: this.normalizePositiveNumber(requestOptions.homebridgeAutoOffBelowDuration, 300000),
-      pollInterval: Math.max(5000, this.normalizePositiveNumber(requestOptions.homebridgeAutoOffPollInterval, 30000))
-    } : null);
-    this.configurePresenceDisplayMonitor(instanceId, hasHomebridge ? {
-      url: homebridgeUrl,
-      username: homebridgeUsername,
-      password: homebridgePassword,
-      verifySSL: homebridgeVerifySSL,
-      allowDiscovery: homebridgeConfig.allowDiscovery,
-      enabled: this.normalizeBoolean(requestOptions.presenceDisplayControlEnabled, false),
-      sensorName: String(requestOptions.presenceDisplaySensorName || "Hallway - Sensor").trim(),
-      offDelay: Math.max(1000, this.normalizePositiveNumber(requestOptions.presenceDisplayOffDelay, 300000)),
-      pollInterval: Math.max(5000, this.normalizePositiveNumber(requestOptions.presenceDisplayPollInterval, 15000)),
-      output: String(requestOptions.presenceDisplayOutput || "HDMI-A-1").trim()
-    } : null);
 
     function finalSend(devices) {
       if (!hasHomebridge) {
@@ -227,6 +204,157 @@ module.exports = NodeHelper.create({
 
   resolveHomebridgeVerifySSL: function () {
     return this.normalizeBoolean(process.env.HOMEBRIDGE_VERIFY_SSL, true);
+  },
+
+  resolveServerAutomationEnabled: function (name) {
+    var rawValue = String(process.env[name] || "").trim().toLowerCase();
+
+    if (!rawValue) {
+      return { enabled: false, error: null };
+    }
+
+    if (["1", "on", "true", "yes"].includes(rawValue)) {
+      return { enabled: true, error: null };
+    }
+
+    if (["0", "off", "false", "no"].includes(rawValue)) {
+      return { enabled: false, error: null };
+    }
+
+    return { enabled: false, error: name + " must be true or false." };
+  },
+
+  resolveRequiredAutomationNumber: function (name, minimum) {
+    var rawValue = String(process.env[name] || "").trim();
+    var numericValue = Number(rawValue);
+
+    if (!rawValue || !Number.isFinite(numericValue) || numericValue < minimum) {
+      return {
+        value: null,
+        error: name + " must be a number greater than or equal to " + minimum + "."
+      };
+    }
+
+    return { value: numericValue, error: null };
+  },
+
+  resolveHomebridgeAutoOffPolicy: function (homebridgeConfig, verifySSL) {
+    var enabledSetting = this.resolveServerAutomationEnabled("HOMEBRIDGE_AUTO_OFF_ENABLED");
+    var deviceName;
+    var threshold;
+    var arm;
+    var belowDuration;
+    var pollInterval;
+    var error;
+
+    if (enabledSetting.error || !enabledSetting.enabled) {
+      return { config: null, error: enabledSetting.error };
+    }
+
+    if (homebridgeConfig.error || !homebridgeConfig.url || !homebridgeConfig.username) {
+      return {
+        config: null,
+        error: homebridgeConfig.error || "Homebridge server credentials are required when HOMEBRIDGE_AUTO_OFF_ENABLED=true."
+      };
+    }
+
+    deviceName = String(process.env.HOMEBRIDGE_AUTO_OFF_DEVICE_NAME || "").trim();
+    threshold = this.resolveRequiredAutomationNumber("HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS", 0.001);
+    arm = this.resolveRequiredAutomationNumber("HOMEBRIDGE_AUTO_OFF_ARM_WATTS", 0.001);
+    belowDuration = this.resolveRequiredAutomationNumber("HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS", 1);
+    pollInterval = this.resolveRequiredAutomationNumber("HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS", 5000);
+    error = !deviceName ? "HOMEBRIDGE_AUTO_OFF_DEVICE_NAME is required when auto-off is enabled." :
+      threshold.error || arm.error || belowDuration.error || pollInterval.error;
+
+    if (!error && arm.value <= threshold.value) {
+      error = "HOMEBRIDGE_AUTO_OFF_ARM_WATTS must be greater than HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS.";
+    }
+
+    if (error) {
+      return { config: null, error: error };
+    }
+
+    return {
+      config: {
+        url: homebridgeConfig.url,
+        username: homebridgeConfig.username,
+        password: homebridgeConfig.password,
+        verifySSL: verifySSL,
+        allowDiscovery: homebridgeConfig.allowDiscovery,
+        enabled: true,
+        deviceName: deviceName,
+        thresholdWatts: threshold.value,
+        armWatts: arm.value,
+        belowDuration: belowDuration.value,
+        pollInterval: pollInterval.value
+      },
+      error: null
+    };
+  },
+
+  resolvePresenceDisplayPolicy: function (homebridgeConfig, verifySSL) {
+    var enabledSetting = this.resolveServerAutomationEnabled("PRESENCE_DISPLAY_CONTROL_ENABLED");
+    var sensorName;
+    var output;
+    var offDelay;
+    var pollInterval;
+    var error;
+
+    if (enabledSetting.error || !enabledSetting.enabled) {
+      return { config: null, error: enabledSetting.error };
+    }
+
+    if (homebridgeConfig.error || !homebridgeConfig.url || !homebridgeConfig.username) {
+      return {
+        config: null,
+        error: homebridgeConfig.error || "Homebridge server credentials are required when PRESENCE_DISPLAY_CONTROL_ENABLED=true."
+      };
+    }
+
+    sensorName = String(process.env.PRESENCE_DISPLAY_SENSOR_NAME || "").trim();
+    output = String(process.env.PRESENCE_DISPLAY_OUTPUT || "").trim();
+    offDelay = this.resolveRequiredAutomationNumber("PRESENCE_DISPLAY_OFF_DELAY_MS", 1000);
+    pollInterval = this.resolveRequiredAutomationNumber("PRESENCE_DISPLAY_POLL_INTERVAL_MS", 5000);
+    error = !sensorName ? "PRESENCE_DISPLAY_SENSOR_NAME is required when display control is enabled." :
+      !/^[A-Za-z0-9_.:-]+$/.test(output) ? "PRESENCE_DISPLAY_OUTPUT must be a non-empty Wayland output name containing only letters, numbers, dots, underscores, colons, or hyphens." :
+        offDelay.error || pollInterval.error;
+
+    if (error) {
+      return { config: null, error: error };
+    }
+
+    return {
+      config: {
+        url: homebridgeConfig.url,
+        username: homebridgeConfig.username,
+        password: homebridgeConfig.password,
+        verifySSL: verifySSL,
+        allowDiscovery: homebridgeConfig.allowDiscovery,
+        enabled: true,
+        sensorName: sensorName,
+        offDelay: offDelay.value,
+        pollInterval: pollInterval.value,
+        output: output
+      },
+      error: null
+    };
+  },
+
+  initializeServerAutomations: function () {
+    var homebridgeConfig = this.resolveHomebridgeConfig();
+    var verifySSL = this.resolveHomebridgeVerifySSL();
+    var autoOffPolicy = this.resolveHomebridgeAutoOffPolicy(homebridgeConfig, verifySSL);
+    var presencePolicy = this.resolvePresenceDisplayPolicy(homebridgeConfig, verifySSL);
+
+    this.configureHomebridgeAutoOff(SERVER_AUTO_OFF_MONITOR_ID, autoOffPolicy.config);
+    this.configurePresenceDisplayMonitor(SERVER_PRESENCE_MONITOR_ID, presencePolicy.config);
+
+    if (autoOffPolicy.error) {
+      console.error("[MMM-GoveeSmartHomeStatus] Homebridge auto-off disabled:", autoOffPolicy.error);
+    }
+    if (presencePolicy.error) {
+      console.error("[MMM-GoveeSmartHomeStatus] Presence display control disabled:", presencePolicy.error);
+    }
   },
 
   canonicalizeHomebridgeOrigin: function (urlValue) {

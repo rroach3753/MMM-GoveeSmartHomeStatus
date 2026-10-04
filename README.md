@@ -207,23 +207,36 @@ Then restart MagicMirror.
 | `errorMessage` | String | Error message | `"Error fetching Govee device data."` |
 | `fullWidthBottomBar` | Boolean | Span full width of bottom_bar position | `false` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
-| `homebridgeAutoOffEnabled` | Boolean | Monitor the configured Homebridge outlet locally and turn it off after sustained low power | `true` |
-| `homebridgeAutoOffDeviceName` | String | Exact Homebridge accessory, service, or Govee device name to monitor (case-insensitive) | `"eBike - Pro"` |
-| `homebridgeAutoOffThresholdWatts` | Number | Turn-off threshold in watts; readings must be strictly below this value | `5` |
-| `homebridgeAutoOffArmWatts` | Number | Wattage that must be observed before low-power shutoff is armed | `20` |
-| `homebridgeAutoOffBelowDuration` | Number | Time in milliseconds that power must remain below the threshold | `300000` |
-| `homebridgeAutoOffPollInterval` | Number | Local Homebridge polling interval in milliseconds; does not use the Govee OpenAPI | `30000` |
-| `presenceDisplayControlEnabled` | Boolean | Control the MagicMirror monitor from a Homebridge occupancy sensor | `false` |
-| `presenceDisplaySensorName` | String | Exact Homebridge occupancy accessory or service name | `"Hallway - Sensor"` |
-| `presenceDisplayOffDelay` | Number | Continuous absence time before turning off the display, in milliseconds | `300000` |
-| `presenceDisplayPollInterval` | Number | Homebridge occupancy polling interval, in milliseconds | `15000` |
-| `presenceDisplayOutput` | String | Wayland output controlled with `wlr-randr` | `"HDMI-A-1"` |
 
 ## Security
 
-Secrets are server-only. Set `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` in the MagicMirror process environment; values placed in browser-side `config.js` are ignored. `HOMEBRIDGE_URL` must be an HTTPS origin without a path, query, fragment, or embedded credentials. Plaintext HTTP origins are rejected so Homebridge credentials and bearer tokens cannot cross the network unencrypted.
+Secrets and privileged automation policy are server-only. Set them in the MagicMirror process environment; values placed in browser-side `config.js` or socket payloads are ignored. Renderer requests can request device status and Homebridge wattage enrichment, but cannot enable or retarget Homebridge writes or display control. `HOMEBRIDGE_URL` must be an HTTPS origin without a path, query, fragment, or embedded credentials. Plaintext HTTP origins are rejected so Homebridge credentials and bearer tokens cannot cross the network unencrypted.
 
 Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. A trusted self-signed local installation can explicitly set `HOMEBRIDGE_VERIFY_SSL=false`, but using a trusted private CA is strongly preferred because disabling verification permits interception of Homebridge credentials and access tokens.
+
+### Server Automation Policy
+
+Privileged automation is disabled by default. To enable an automation, set its enable variable to `true` and provide every related policy variable in the server environment before restarting MagicMirror. Invalid or incomplete enabled policy fails closed and does not create a monitor.
+
+| Environment variable | Description |
+| --- | --- |
+| `HOMEBRIDGE_AUTO_OFF_ENABLED` | Explicitly enable outlet auto-off (`true`/`false`) |
+| `HOMEBRIDGE_AUTO_OFF_DEVICE_NAME` | Exact allowed Homebridge accessory or service name |
+| `HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS` | Low-power turn-off threshold |
+| `HOMEBRIDGE_AUTO_OFF_ARM_WATTS` | Arming wattage; must exceed the threshold |
+| `HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS` | Required continuous low-power duration |
+| `HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS` | Poll interval, minimum 5000 ms |
+| `PRESENCE_DISPLAY_CONTROL_ENABLED` | Explicitly enable occupancy-driven display control (`true`/`false`) |
+| `PRESENCE_DISPLAY_SENSOR_NAME` | Exact allowed Homebridge occupancy sensor name |
+| `PRESENCE_DISPLAY_OFF_DELAY_MS` | Continuous absence delay, minimum 1000 ms |
+| `PRESENCE_DISPLAY_POLL_INTERVAL_MS` | Poll interval, minimum 5000 ms |
+| `PRESENCE_DISPLAY_OUTPUT` | Exact allowed Wayland output passed to `wlr-randr` |
+
+See `.env.example` for a complete sample. How these variables are supplied depends on how MagicMirror is launched (for example, a systemd `EnvironmentFile`, PM2 environment settings, or shell exports).
+
+#### Migration from Browser Configuration
+
+The former `config.js` keys `homebridgeAutoOff*` and `presenceDisplay*` no longer have any effect. Auto-off was previously enabled by default for `eBike - Pro`; after this security change it remains off until all six `HOMEBRIDGE_AUTO_OFF_*` variables are explicitly configured on the server. Presence display users must likewise migrate all settings to the five `PRESENCE_DISPLAY_*` variables. Existing Homebridge credentials, wattage display, and TLS settings are unchanged.
 
 ## Usage Examples
 
@@ -404,29 +417,24 @@ Set `groupCompactCardsByRoom: false` to restore the original flat compact-card g
 
 Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value on each refresh.
 
-By default, the module also monitors the Homebridge outlet named `eBike - Pro` every 30 seconds. After observing at least 20W, it turns the outlet off when consumption remains below 5W for five minutes. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. Set `homebridgeAutoOffEnabled: false` to disable the automation.
+The optional server auto-off policy can monitor one explicitly allowed Homebridge outlet and turn it off after an explicitly configured period of sustained low power. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. It is disabled unless the complete server environment policy above is present.
 
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 
 The module matches Homebridge accessories to Govee devices by device ID, with a case-insensitive device-name fallback. No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
 
-Trust the exact local origin on the MagicMirror server before using renderer-side Homebridge credentials:
+Trust the exact local origin and configure Homebridge credentials only on the MagicMirror server:
 
 ```bash
 export HOMEBRIDGE_URL="https://192.168.1.50:8581"
 export HOMEBRIDGE_USERNAME="admin"
 export HOMEBRIDGE_PASSWORD="yourpassword"
-```
-
-```javascript
-{
-   module: "MMM-GoveeSmartHomeStatus",
-   position: "top_right",
-   config: {
-      showPowerConsumption: true,
-      homebridgeAutoOffEnabled: true
-   }
-},
+export HOMEBRIDGE_AUTO_OFF_ENABLED="true"
+export HOMEBRIDGE_AUTO_OFF_DEVICE_NAME="eBike - Pro"
+export HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS="5"
+export HOMEBRIDGE_AUTO_OFF_ARM_WATTS="20"
+export HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS="300000"
+export HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS="30000"
 ```
 
 If Homebridge is unreachable or returns an error the Govee devices still display normally; the wattage value is simply omitted.
