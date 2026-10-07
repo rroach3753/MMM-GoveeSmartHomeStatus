@@ -4,7 +4,8 @@
 
 ### Documentation
 
-- Added a complete basic `config.js` example with API-key and restart instructions
+- Added a paste-ready basic module configuration example with API-key and
+  restart instructions
 
 ### Changed
 

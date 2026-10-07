@@ -161,23 +161,21 @@ If you do not see the API key option in-app, update the app to the latest versio
    export GOVEE_API_KEY="YOUR_GOVEE_API_KEY"
    ```
 
-2. Add the module to the `modules` array in `config/config.js`:
+2. Add this module block inside the `modules` array in `config/config.js`:
 
 ```javascript
-modules: [
-  {
-    module: "MMM-GoveeSmartHomeStatus",
-    position: "top_right",
-    config: {
-      title: "Govee Devices",
-      refreshInterval: 480000,
-      showOnlineOnly: false,
-      showPower: true,
-      showTemperature: true,
-      showHumidity: true
-    }
+{
+  module: "MMM-GoveeSmartHomeStatus",
+  position: "top_right",
+  config: {
+    title: "Govee Devices",
+    refreshInterval: 480000,
+    showOnlineOnly: false,
+    showPower: true,
+    showTemperature: true,
+    showHumidity: true
   }
-]
+},
 ```
 
 3. Restart the complete MagicMirror process so the node helper receives
