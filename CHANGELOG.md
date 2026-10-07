@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Documentation
+
+- Added a complete basic `config.js` example with API-key and restart instructions
+
+### Changed
+
+- Updated the development dependency tree to use `ansi-regex` 6.4.0 and
+  `micromark-factory-space` 2.1.0
+
 ## [2.0.0] - 2026-10-04
 
 ### Fixed

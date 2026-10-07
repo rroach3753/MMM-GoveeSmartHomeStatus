@@ -153,22 +153,43 @@ If you do not see the API key option in-app, update the app to the latest versio
 
 ## Configuration
 
-### Basic Config Example (Quick Start)
+### Basic Configuration Example
 
-Add this module block to your MagicMirror `config/config.js` file to get started:
+1. Set the Govee API key in the environment used to start MagicMirror:
 
-1. Install the module in your `MagicMirror/modules` folder.
-2. Add this module block to the modules array in `config/config.js`.
-3. Save and restart MagicMirror.
+   ```bash
+   export GOVEE_API_KEY="YOUR_GOVEE_API_KEY"
+   ```
+
+2. Add the module to the `modules` array in `config/config.js`:
 
 ```javascript
-{
-  module: "MMM-GoveeSmartHomeStatus",
-  position: "top_right"
-},
+modules: [
+  {
+    module: "MMM-GoveeSmartHomeStatus",
+    position: "top_right",
+    config: {
+      title: "Govee Devices",
+      refreshInterval: 480000,
+      showOnlineOnly: false,
+      showPower: true,
+      showTemperature: true,
+      showHumidity: true
+    }
+  }
+]
 ```
 
-Then restart MagicMirror.
+3. Restart the complete MagicMirror process so the node helper receives
+   `GOVEE_API_KEY`. For PM2 installations:
+
+   ```bash
+   pm2 restart MagicMirror --update-env
+   ```
+
+Secrets and privileged automation settings must not be placed in
+`config/config.js`. See [Security](#security) for the server-only Homebridge,
+auto-off, and presence-display variables.
 
 ## Configuration Options
 
