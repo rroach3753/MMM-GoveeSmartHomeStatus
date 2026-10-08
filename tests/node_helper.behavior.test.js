@@ -4,6 +4,7 @@ const Module = require("node:module");
 const EventEmitter = require("node:events");
 const fs = require("node:fs");
 const https = require("node:https");
+const os = require("node:os");
 const path = require("node:path");
 const vm = require("node:vm");
 
@@ -701,6 +702,45 @@ test("Homebridge auto-off requires charging and sustained power below threshold"
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 3000), false);
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 302999), false);
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 303000), true);
+});
+
+test("Homebridge auto-off preserves an armed charging cycle across restarts", () => {
+  const previousStateHome = process.env.XDG_STATE_HOME;
+  const stateHome = fs.mkdtempSync(path.join(os.tmpdir(), "govee-auto-off-"));
+  const config = {
+    url: "https://homebridge.local:8581",
+    deviceName: "eBike - Pro",
+    thresholdWatts: 6,
+    armWatts: 20
+  };
+  const monitor = {
+    config,
+    armed: false,
+    belowSince: null,
+    persistState: true
+  };
+
+  process.env.XDG_STATE_HOME = stateHome;
+
+  try {
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 25, isOn: true }, 1000), false);
+    assert.equal(helper.loadHomebridgeAutoOffArmedState(config), true);
+    assert.equal(helper.loadHomebridgeAutoOffArmedState({
+      ...config,
+      deviceName: "Different Outlet"
+    }), false);
+
+    monitor.armed = true;
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 0, isOn: false }, 2000), false);
+    assert.equal(helper.loadHomebridgeAutoOffArmedState(config), false);
+  } finally {
+    if (previousStateHome === undefined) {
+      delete process.env.XDG_STATE_HOME;
+    } else {
+      process.env.XDG_STATE_HOME = previousStateHome;
+    }
+    fs.rmSync(stateHome, { recursive: true, force: true });
+  }
 });
 
 test("Homebridge occupancy map reads presence sensor state", () => {

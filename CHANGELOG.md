@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserved an armed Homebridge outlet auto-off cycle across MagicMirror restarts
+
 ### Documentation
 
 - Added a paste-ready basic module configuration example with API-key and

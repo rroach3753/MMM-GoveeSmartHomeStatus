@@ -3,6 +3,9 @@ const http = require("node:http");
 const https = require("node:https");
 const dgram = require("node:dgram");
 const childProcess = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const { URL } = require("node:url");
 const { Bonjour } = require("bonjour-service");
 
@@ -1404,9 +1407,10 @@ module.exports = NodeHelper.create({
     this.homebridgeAutoOffMonitors[monitorId] = {
       config: config,
       configKey: configKey,
-      armed: false,
+      armed: monitorId === SERVER_AUTO_OFF_MONITOR_ID && this.loadHomebridgeAutoOffArmedState(config),
       belowSince: null,
       shuttingOff: false,
+      persistState: monitorId === SERVER_AUTO_OFF_MONITOR_ID,
       timer: null
     };
 
@@ -1485,6 +1489,7 @@ module.exports = NodeHelper.create({
             if (setError) {
               console.error("[MMM-GoveeSmartHomeStatus] Failed to turn off " + monitor.config.deviceName + ":", setError.message);
             } else {
+              self.persistHomebridgeAutoOffArmedState(monitor, false);
               monitor.armed = false;
               monitor.belowSince = null;
               console.log("[MMM-GoveeSmartHomeStatus] Turned off " + monitor.config.deviceName + " after sustained low power");
@@ -1501,12 +1506,21 @@ module.exports = NodeHelper.create({
 
   processHomebridgeAutoOffReading: function (monitor, outlet, now) {
     if (!outlet || outlet.isOn === false || !Number.isFinite(outlet.watts)) {
+      if (monitor.armed) {
+        this.persistHomebridgeAutoOffArmedState(monitor, false);
+      }
       monitor.armed = false;
       monitor.belowSince = null;
       return false;
     }
 
     if (outlet.watts >= monitor.config.armWatts) {
+      if (!monitor.armed) {
+        this.persistHomebridgeAutoOffArmedState(monitor, true);
+        if (monitor.persistState) {
+          console.log("[MMM-GoveeSmartHomeStatus] Armed auto-off for " + monitor.config.deviceName);
+        }
+      }
       monitor.armed = true;
       monitor.belowSince = null;
       return false;
@@ -1523,6 +1537,86 @@ module.exports = NodeHelper.create({
     }
 
     return now - monitor.belowSince >= monitor.config.belowDuration;
+  },
+
+  getHomebridgeAutoOffStatePath: function () {
+    var stateRoot = String(process.env.XDG_STATE_HOME || "").trim() ||
+      path.join(os.homedir(), ".local", "state");
+
+    return path.join(stateRoot, "MMM-GoveeSmartHomeStatus", "homebridge-auto-off.json");
+  },
+
+  getHomebridgeAutoOffStateIdentity: function (config) {
+    return {
+      url: config.url,
+      deviceName: String(config.deviceName || "").trim().toLowerCase(),
+      thresholdWatts: config.thresholdWatts,
+      armWatts: config.armWatts
+    };
+  },
+
+  loadHomebridgeAutoOffArmedState: function (config) {
+    var statePath = this.getHomebridgeAutoOffStatePath();
+    var expected = this.getHomebridgeAutoOffStateIdentity(config);
+    var state;
+
+    try {
+      state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        console.error("[MMM-GoveeSmartHomeStatus] Failed to read auto-off state:", error.message);
+      }
+      return false;
+    }
+
+    return state.armed === true &&
+      state.url === expected.url &&
+      state.deviceName === expected.deviceName &&
+      state.thresholdWatts === expected.thresholdWatts &&
+      state.armWatts === expected.armWatts;
+  },
+
+  persistHomebridgeAutoOffArmedState: function (monitor, armed) {
+    var statePath;
+    var temporaryPath;
+    var state;
+
+    if (!monitor.persistState) {
+      return;
+    }
+
+    statePath = this.getHomebridgeAutoOffStatePath();
+    temporaryPath = statePath + "." + process.pid + ".tmp";
+
+    if (!armed) {
+      try {
+        fs.unlinkSync(statePath);
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          console.error("[MMM-GoveeSmartHomeStatus] Failed to clear auto-off state:", error.message);
+        }
+      }
+      return;
+    }
+
+    state = Object.assign(this.getHomebridgeAutoOffStateIdentity(monitor.config), {
+      armed: true
+    });
+
+    try {
+      fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(temporaryPath, JSON.stringify(state), { encoding: "utf8", mode: 0o600 });
+      fs.renameSync(temporaryPath, statePath);
+    } catch (error) {
+      try {
+        fs.unlinkSync(temporaryPath);
+      } catch (cleanupError) {
+        if (cleanupError.code !== "ENOENT") {
+          console.error("[MMM-GoveeSmartHomeStatus] Failed to clean up temporary auto-off state:", cleanupError.message);
+        }
+      }
+      console.error("[MMM-GoveeSmartHomeStatus] Failed to persist auto-off state:", error.message);
+    }
   },
 
   configurePresenceDisplayMonitor: function (instanceId, config) {

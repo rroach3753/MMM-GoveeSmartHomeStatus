@@ -436,7 +436,7 @@ Set `groupCompactCardsByRoom: false` to restore the original flat compact-card g
 
 Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value on each refresh.
 
-The optional server auto-off policy can monitor one explicitly allowed Homebridge outlet and turn it off after an explicitly configured period of sustained low power. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. It is disabled unless the complete server environment policy above is present.
+The optional server auto-off policy can monitor one explicitly allowed Homebridge outlet and turn it off after an explicitly configured period of sustained low power. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. It is disabled unless the complete server environment policy above is present. Once charging reaches the configured arming wattage, the armed state is stored under the user's XDG state directory so a MagicMirror restart during the same charging cycle does not prevent shutoff.
 
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 
