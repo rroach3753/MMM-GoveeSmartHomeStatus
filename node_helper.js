@@ -57,12 +57,8 @@ module.exports = NodeHelper.create({
     var self = this;
     var instanceId = requestOptions.instanceId || null;
     var homebridgeConfig = this.resolveHomebridgeConfig();
+    var lanConfig = this.resolveLanConfig();
     var apiKey = String(process.env.GOVEE_API_KEY || "").trim();
-    var enableLanControl = requestOptions.enableLanControl === true;
-    var lanOnly = requestOptions.lanOnly === true;
-    var lanDiscoveryTimeout = Number(requestOptions.lanDiscoveryTimeout) || 4000;
-    var lanDiscoveryTargets = this.normalizeDiscoveryTargets(requestOptions.lanDiscoveryTargets);
-    var staticLanDevices = this.normalizeStaticLanDevices(requestOptions.lanStaticDevices);
     var cloudDeviceListRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceListRefreshInterval);
     var cloudDeviceStateRefreshInterval = this.normalizeRefreshInterval(requestOptions.cloudDeviceStateRefreshInterval);
     var homebridgeUrl = homebridgeConfig.url;
@@ -73,6 +69,11 @@ module.exports = NodeHelper.create({
 
     if (homebridgeConfig.error) {
       this.sendDevicesError(homebridgeConfig.error, instanceId);
+      return;
+    }
+
+    if (lanConfig.error) {
+      this.sendDevicesError(lanConfig.error, instanceId);
       return;
     }
 
@@ -97,14 +98,14 @@ module.exports = NodeHelper.create({
       });
     }
 
-    if (enableLanControl) {
-      this.discoverLanDevices(lanDiscoveryTimeout, lanDiscoveryTargets, function (lanError, lanDevices) {
-        var combinedLanDevices = self.addStaticLanDevices(lanDevices, staticLanDevices);
+    if (lanConfig.enabled) {
+      this.discoverLanDevices(lanConfig.timeout, lanConfig.discoveryTargets, function (lanError, lanDevices) {
+        var combinedLanDevices = self.addStaticLanDevices(lanDevices, lanConfig.staticDevices);
 
-        self.fetchLanDeviceStatuses(combinedLanDevices, lanDiscoveryTimeout, function (lanStatusError, statusLanDevices) {
+        self.fetchLanDeviceStatuses(combinedLanDevices, lanConfig.timeout, function (lanStatusError, statusLanDevices) {
           var lanDevicesWithStatus = statusLanDevices;
 
-          if (lanOnly) {
+          if (lanConfig.only) {
             if ((lanError || lanStatusError) && !lanDevicesWithStatus.length) {
               self.sendDevicesError("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"), instanceId);
               return;
@@ -115,7 +116,7 @@ module.exports = NodeHelper.create({
           }
 
           if (!apiKey) {
-            self.sendDevicesError("API key is required unless lanOnly is enabled", instanceId);
+            self.sendDevicesError("API key is required unless GOVEE_LAN_ONLY is enabled", instanceId);
             return;
           }
 
@@ -145,6 +146,52 @@ module.exports = NodeHelper.create({
     }
 
     sendCloudData();
+  },
+
+  resolveLanConfig: function () {
+    var enabledSetting = this.resolveServerAutomationEnabled("GOVEE_LAN_CONTROL_ENABLED");
+    var onlySetting = this.resolveServerAutomationEnabled("GOVEE_LAN_ONLY");
+    var timeoutValue = String(process.env.GOVEE_LAN_DISCOVERY_TIMEOUT_MS || "").trim();
+    var timeout = timeoutValue ? Number(timeoutValue) : 4000;
+    var rawStaticDevices = String(process.env.GOVEE_LAN_STATIC_DEVICES || "").trim();
+    var staticDevices = [];
+
+    if (enabledSetting.error || onlySetting.error) {
+      return {
+        error: enabledSetting.error || onlySetting.error
+      };
+    }
+
+    if (!Number.isFinite(timeout) || timeout < 1000 || timeout > 30000) {
+      return {
+        error: "GOVEE_LAN_DISCOVERY_TIMEOUT_MS must be between 1000 and 30000."
+      };
+    }
+
+    if (rawStaticDevices) {
+      try {
+        staticDevices = JSON.parse(rawStaticDevices);
+      } catch {
+        return {
+          error: "GOVEE_LAN_STATIC_DEVICES must be a valid JSON array."
+        };
+      }
+
+      if (!Array.isArray(staticDevices)) {
+        return {
+          error: "GOVEE_LAN_STATIC_DEVICES must be a valid JSON array."
+        };
+      }
+    }
+
+    return {
+      enabled: enabledSetting.enabled,
+      only: enabledSetting.enabled && onlySetting.enabled,
+      timeout: timeout,
+      discoveryTargets: this.normalizeDiscoveryTargets(process.env.GOVEE_LAN_DISCOVERY_TARGETS),
+      staticDevices: this.normalizeStaticLanDevices(staticDevices),
+      error: null
+    };
   },
 
   resolveHomebridgeConfig: function () {
@@ -923,7 +970,7 @@ module.exports = NodeHelper.create({
     });
 
     if (isTruncated) {
-      console.warn("[MMM-GoveeSmartHomeStatus] lanDiscoveryTargets exceeded max of " + LAN_DISCOVERY_MAX_UNICAST_TARGETS + " expanded IPs. Extra entries were ignored.");
+      console.warn("[MMM-GoveeSmartHomeStatus] GOVEE_LAN_DISCOVERY_TARGETS exceeded max of " + LAN_DISCOVERY_MAX_UNICAST_TARGETS + " expanded IPs. Extra entries were ignored.");
     }
 
     return expanded;

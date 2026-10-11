@@ -15,11 +15,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     hideAppliances: true,
     hiddenApplianceKeywords: ["ice maker", "icemaker", "refrigerator", "fridge"],
     roomNameDelimiter: " - ",
-    enableLanControl: false,
-    lanOnly: false,
-    lanDiscoveryTimeout: 4000,
-    lanDiscoveryTargets: [],
-    lanStaticDevices: [],
     cloudDeviceListRefreshInterval: 0,
     cloudDeviceStateRefreshInterval: 0,
     fullWidthBottomBar: false,
@@ -59,11 +54,6 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
     this.sendSocketNotification("GOVEE_DEVICES_REQUEST", {
       instanceId: this.instanceId,
-      enableLanControl: this.config.enableLanControl,
-      lanOnly: this.config.lanOnly,
-      lanDiscoveryTimeout: this.config.lanDiscoveryTimeout,
-      lanDiscoveryTargets: this.config.lanDiscoveryTargets,
-      lanStaticDevices: this.config.lanStaticDevices,
       cloudDeviceListRefreshInterval: this.config.cloudDeviceListRefreshInterval,
       cloudDeviceStateRefreshInterval: this.config.cloudDeviceStateRefreshInterval
     });
@@ -100,9 +90,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   },
 
   getRequestTimeout: function () {
-    var lanWindow = this.config.enableLanControl ? Math.max(1000, Number(this.config.lanDiscoveryTimeout) || 4000) * 2 : 0;
-
-    return Math.max(30000, lanWindow + 5000);
+    return 65000;
   },
 
   socketNotificationReceived: function (notification, payload) {

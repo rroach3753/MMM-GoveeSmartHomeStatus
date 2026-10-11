@@ -24,7 +24,12 @@ Module._load = function (request, parent, isMain) {
 const helper = require("../node_helper");
 Module._load = originalLoad;
 
-const SERVER_AUTOMATION_ENV_NAMES = [
+const SERVER_ENV_NAMES = [
+  "GOVEE_LAN_CONTROL_ENABLED",
+  "GOVEE_LAN_ONLY",
+  "GOVEE_LAN_DISCOVERY_TIMEOUT_MS",
+  "GOVEE_LAN_DISCOVERY_TARGETS",
+  "GOVEE_LAN_STATIC_DEVICES",
   "HOMEBRIDGE_URL",
   "HOMEBRIDGE_USERNAME",
   "HOMEBRIDGE_PASSWORD",
@@ -42,12 +47,12 @@ const SERVER_AUTOMATION_ENV_NAMES = [
   "PRESENCE_DISPLAY_OUTPUT"
 ];
 
-function replaceServerAutomationEnvironment(values) {
+function replaceServerEnvironment(values) {
   const previousValues = Object.fromEntries(
-    SERVER_AUTOMATION_ENV_NAMES.map((name) => [name, process.env[name]])
+    SERVER_ENV_NAMES.map((name) => [name, process.env[name]])
   );
 
-  SERVER_AUTOMATION_ENV_NAMES.forEach((name) => delete process.env[name]);
+  SERVER_ENV_NAMES.forEach((name) => delete process.env[name]);
   Object.entries(values || {}).forEach(([name, value]) => {
     process.env[name] = value;
   });
@@ -153,7 +158,12 @@ test("frontend request omits all server-only secrets and automation policy", () 
       presenceDisplaySensorName: "Attacker Sensor",
       presenceDisplayOffDelay: 1,
       presenceDisplayPollInterval: 1,
-      presenceDisplayOutput: "ATTACKER-1"
+      presenceDisplayOutput: "ATTACKER-1",
+      enableLanControl: true,
+      lanOnly: true,
+      lanDiscoveryTimeout: 1000,
+      lanDiscoveryTargets: ["10.0.0.0/8"],
+      lanStaticDevices: [{ ip: "10.0.0.1" }]
     }),
     identifier: "test-instance",
     sendSocketNotification(notification, payload) {
@@ -182,7 +192,12 @@ test("frontend request omits all server-only secrets and automation policy", () 
     "presenceDisplaySensorName",
     "presenceDisplayOffDelay",
     "presenceDisplayPollInterval",
-    "presenceDisplayOutput"
+    "presenceDisplayOutput",
+    "enableLanControl",
+    "lanOnly",
+    "lanDiscoveryTimeout",
+    "lanDiscoveryTargets",
+    "lanStaticDevices"
   ].forEach((name) => assert.equal(Object.hasOwn(requestPayload, name), false));
 });
 
@@ -774,8 +789,99 @@ test("presence display waits five minutes to turn off and wakes immediately", ()
   assert.equal(monitor.absentSince, null);
 });
 
+test("malicious renderer LAN settings cannot trigger internal network probes", () => {
+  const restoreEnvironment = replaceServerEnvironment({});
+  const previousApiKey = process.env.GOVEE_API_KEY;
+  const originalDiscover = helper.discoverLanDevices;
+  const originalFetchCloud = helper.fetchCloudDevicesSegmented;
+  const originalSend = helper.sendDevicesData;
+  let discoveryCalls = 0;
+  let cloudCalls = 0;
+
+  process.env.GOVEE_API_KEY = "server-key";
+  helper.discoverLanDevices = () => {
+    discoveryCalls += 1;
+  };
+  helper.fetchCloudDevicesSegmented = (apiKey, listInterval, stateInterval, callback) => {
+    cloudCalls += 1;
+    callback(null, []);
+  };
+  helper.sendDevicesData = () => {};
+
+  try {
+    helper.fetchGoveeDevices({
+      enableLanControl: true,
+      lanOnly: true,
+      lanDiscoveryTimeout: 1000,
+      lanDiscoveryTargets: ["10.0.0.0/8"],
+      lanStaticDevices: [{ ip: "10.0.0.1" }]
+    });
+
+    assert.equal(discoveryCalls, 0);
+    assert.equal(cloudCalls, 1);
+  } finally {
+    restoreEnvironment();
+    helper.discoverLanDevices = originalDiscover;
+    helper.fetchCloudDevicesSegmented = originalFetchCloud;
+    helper.sendDevicesData = originalSend;
+    if (previousApiKey === undefined) {
+      delete process.env.GOVEE_API_KEY;
+    } else {
+      process.env.GOVEE_API_KEY = previousApiKey;
+    }
+  }
+});
+
+test("server LAN policy exclusively controls discovery targets and static devices", () => {
+  const restoreEnvironment = replaceServerEnvironment({
+    GOVEE_LAN_CONTROL_ENABLED: "true",
+    GOVEE_LAN_ONLY: "true",
+    GOVEE_LAN_DISCOVERY_TIMEOUT_MS: "5000",
+    GOVEE_LAN_DISCOVERY_TARGETS: "192.168.10.0/30",
+    GOVEE_LAN_STATIC_DEVICES: JSON.stringify([
+      { ip: "192.168.10.20", deviceId: "trusted-device", deviceName: "Trusted Lamp" }
+    ])
+  });
+  const originalDiscover = helper.discoverLanDevices;
+  const originalFetchStatuses = helper.fetchLanDeviceStatuses;
+  const originalSend = helper.sendDevicesData;
+  let discoveryRequest;
+  let statusDevices;
+
+  helper.discoverLanDevices = (timeout, targets, callback) => {
+    discoveryRequest = { timeout, targets };
+    callback(null, []);
+  };
+  helper.fetchLanDeviceStatuses = (devices, timeout, callback) => {
+    statusDevices = devices;
+    callback(null, devices);
+  };
+  helper.sendDevicesData = () => {};
+
+  try {
+    helper.fetchGoveeDevices({
+      lanDiscoveryTimeout: 1000,
+      lanDiscoveryTargets: ["10.0.0.1"],
+      lanStaticDevices: [{ ip: "10.0.0.2" }]
+    });
+
+    assert.deepEqual(discoveryRequest, {
+      timeout: 5000,
+      targets: ["192.168.10.1", "192.168.10.2"]
+    });
+    assert.equal(statusDevices.length, 1);
+    assert.equal(statusDevices[0].localIp, "192.168.10.20");
+    assert.equal(statusDevices[0].deviceId, "trusted-device");
+  } finally {
+    restoreEnvironment();
+    helper.discoverLanDevices = originalDiscover;
+    helper.fetchLanDeviceStatuses = originalFetchStatuses;
+    helper.sendDevicesData = originalSend;
+  }
+});
+
 test("malicious renderer automation settings cannot create privileged monitors", () => {
-  const restoreEnvironment = replaceServerAutomationEnvironment({
+  const restoreEnvironment = replaceServerEnvironment({
     HOMEBRIDGE_URL: "https://trusted.example:8581",
     HOMEBRIDGE_USERNAME: "server-user",
     HOMEBRIDGE_PASSWORD: "server-password"
@@ -842,7 +948,7 @@ test("malicious renderer automation settings cannot create privileged monitors",
 });
 
 test("server automation policy is authoritative and uses singleton monitors", () => {
-  const restoreEnvironment = replaceServerAutomationEnvironment({
+  const restoreEnvironment = replaceServerEnvironment({
     HOMEBRIDGE_URL: "https://trusted.example:8581",
     HOMEBRIDGE_USERNAME: "server-user",
     HOMEBRIDGE_PASSWORD: "server-password",
@@ -933,7 +1039,7 @@ test("server automation policy is authoritative and uses singleton monitors", ()
 });
 
 test("incomplete or invalid enabled server automation policy fails closed", () => {
-  const restoreEnvironment = replaceServerAutomationEnvironment({
+  const restoreEnvironment = replaceServerEnvironment({
     HOMEBRIDGE_URL: "https://trusted.example:8581",
     HOMEBRIDGE_USERNAME: "server-user",
     HOMEBRIDGE_PASSWORD: "server-password",

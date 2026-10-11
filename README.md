@@ -117,14 +117,16 @@ mmpm update MMM-GoveeSmartHomeStatus
 
 This module requires a Govee Open API key. Without it, device data cannot be loaded.
 
-If you configure `enableLanControl: true` and `lanOnly: true`, you can run LAN discovery mode without an API key.
+If you set `GOVEE_LAN_CONTROL_ENABLED=true` and `GOVEE_LAN_ONLY=true` in the
+MagicMirror server environment, you can run LAN discovery mode without an API
+key.
 
 LAN-only mode is currently discovery-focused. Some devices may not report cloud-level telemetry fields (for example, power/temperature/humidity) unless cloud mode is also enabled.
 
 Fallback behavior:
 
-- In hybrid mode (`enableLanControl: true`, `lanOnly: false`), if LAN `devStatus` is unavailable for a device, the module keeps cloud state for that device.
-- In LAN-only mode (`lanOnly: true`), there is no cloud fallback.
+- In hybrid mode (`GOVEE_LAN_CONTROL_ENABLED=true`, `GOVEE_LAN_ONLY=false`), if LAN `devStatus` is unavailable for a device, the module keeps cloud state for that device.
+- In LAN-only mode (`GOVEE_LAN_ONLY=true`), there is no cloud fallback.
 
 ### How to get a key
 
@@ -206,11 +208,6 @@ auto-off, and presence-display variables.
 | `hideAppliances` | Boolean | Hide appliance-like devices from display | `true` |
 | `hiddenApplianceKeywords` | Array | Case-insensitive keywords used to hide appliances | `['ice maker', 'icemaker', 'refrigerator', 'fridge']` |
 | `roomNameDelimiter` | String | Delimiter used to infer room from device name | `' - '` |
-| `enableLanControl` | Boolean | Enable LAN discovery in addition to cloud API | `false` |
-| `lanOnly` | Boolean | Use LAN discovery only (no API key required) | `false` |
-| `lanDiscoveryTimeout` | Number | LAN discovery timeout in milliseconds | `4000` |
-| `lanDiscoveryTargets` | Array | Optional IPv4 and CIDR target list for unicast LAN discovery probes (for cross-subnet/VLAN environments) | `[]` |
-| `lanStaticDevices` | Array | Optional static LAN device list merged with discovered devices | `[]` |
 | `cloudDeviceListRefreshInterval` | Number | Cloud device-list refresh interval in milliseconds. `0` keeps legacy behavior (every module refresh). | `0` |
 | `cloudDeviceStateRefreshInterval` | Number | Cloud device-state refresh interval in milliseconds. `0` keeps legacy behavior (every module refresh). | `0` |
 | `compactCards` | Boolean | Display devices as compact horizontal cards (scrollable) | `false` |
@@ -223,6 +220,20 @@ auto-off, and presence-display variables.
 | `emptyMessage` | String | Message when no devices available | `"No devices available."` |
 | `loadingMessage` | String | Loading message | `"Loading Govee devices..."` |
 | `noApiKeyMessage` | String | Message when API key not configured | `"API key not configured."` |
+
+### Server-only LAN policy
+
+LAN discovery can send privileged network probes, so its policy is accepted
+only from the MagicMirror server environment. Renderer configuration values
+with these names are ignored.
+
+| Environment variable | Description | Default |
+| -------------------- | ----------- | ------- |
+| `GOVEE_LAN_CONTROL_ENABLED` | Enable LAN discovery | `false` |
+| `GOVEE_LAN_ONLY` | Disable cloud fallback; requires LAN control to be enabled | `false` |
+| `GOVEE_LAN_DISCOVERY_TIMEOUT_MS` | Discovery timeout from 1000 through 30000 milliseconds | `4000` |
+| `GOVEE_LAN_DISCOVERY_TARGETS` | Comma-separated IPv4/CIDR allowlist for optional unicast discovery | Empty |
+| `GOVEE_LAN_STATIC_DEVICES` | JSON array of trusted static LAN device objects | `[]` |
 | `errorMessage` | String | Error message | `"Error fetching Govee device data."` |
 | `fullWidthBottomBar` | Boolean | Span full width of bottom_bar position | `false` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
@@ -303,33 +314,23 @@ Grouped compact cards use two dense rows in the full-width bottom bar. Room sect
 
 ### Hybrid Cloud + LAN Discovery (Recommended)
 
-```javascript
-{
-   module: "MMM-GoveeSmartHomeStatus",
-   position: "top_right",
-   config: {
-      enableLanControl: true,
-      lanOnly: false,
-      lanDiscoveryTimeout: 4000
-   }
-},
+```bash
+export GOVEE_LAN_CONTROL_ENABLED=true
+export GOVEE_LAN_ONLY=false
+export GOVEE_LAN_DISCOVERY_TIMEOUT_MS=4000
 ```
 
 ### LAN-Only Discovery (No API Key)
 
-```javascript
-{
-   module: "MMM-GoveeSmartHomeStatus",
-   position: "top_right",
-   config: {
-      enableLanControl: true,
-      lanOnly: true,
-      lanDiscoveryTimeout: 5000
-   }
-},
+```bash
+export GOVEE_LAN_CONTROL_ENABLED=true
+export GOVEE_LAN_ONLY=true
+export GOVEE_LAN_DISCOVERY_TIMEOUT_MS=5000
 ```
 
-Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you want LAN reachability plus richer cloud state data.
+Tip: Use hybrid mode (`GOVEE_LAN_CONTROL_ENABLED=true` with
+`GOVEE_LAN_ONLY=false`) if you want LAN reachability plus richer cloud state
+data.
 
 ### Hybrid Mode with Segmented Cloud Refresh
 
@@ -339,8 +340,6 @@ Tip: Use hybrid mode (`enableLanControl: true` with `lanOnly: false`) if you wan
    position: "top_right",
    config: {
       refreshInterval: 120000,                 // Module refresh every 2 minutes
-      enableLanControl: true,
-      lanOnly: false,
       cloudDeviceListRefreshInterval: 1800000, // Device list every 30 minutes
       cloudDeviceStateRefreshInterval: 120000  // Device state every 2 minutes
    }
@@ -361,10 +360,6 @@ With segmented refresh enabled, set `refreshInterval` to your fastest desired up
       showRoomSummary: true,
       showLightsSummary: true,
       refreshInterval: 30000,                   // UI/LAN cadence every 30s
-      enableLanControl: true,
-      lanOnly: false,
-      lanDiscoveryTimeout: 5000,
-      lanDiscoveryTargets: ["10.0.10.0/24"],
       cloudDeviceListRefreshInterval: 28800000, // Cloud list every 8h
       cloudDeviceStateRefreshInterval: 600000   // Cloud state every 10m
    }
@@ -372,41 +367,28 @@ With segmented refresh enabled, set `refreshInterval` to your fastest desired up
 ```
 
 This profile keeps local card responsiveness high while reducing cloud API calls.
+Set `GOVEE_LAN_CONTROL_ENABLED=true`,
+`GOVEE_LAN_DISCOVERY_TIMEOUT_MS=5000`, and
+`GOVEE_LAN_DISCOVERY_TARGETS=10.0.10.0/24` in the server environment.
 
 ### Cross-Subnet / VLAN Discovery
 
-```javascript
-{
-   module: "MMM-GoveeSmartHomeStatus",
-   position: "top_right",
-   config: {
-      enableLanControl: true,
-      lanOnly: false,
-      lanDiscoveryTimeout: 5000,
-      lanDiscoveryTargets: ["10.0.10.0/28", "10.0.10.97", "10.0.10.101"],
-      lanStaticDevices: [
-         {
-            ip: "10.0.10.63",
-            deviceId: "05:36:5C:E7:53:E8:F7:24",
-            deviceName: "Kitchen Strip",
-            model: "H1401"
-         },
-         {
-            ip: "10.0.10.97",
-            deviceId: "04:6E:5C:E7:53:CE:51:0E",
-            deviceName: "Desk Lamp",
-            model: "H1401"
-         }
-      ]
-   }
-},
+```bash
+export GOVEE_LAN_CONTROL_ENABLED=true
+export GOVEE_LAN_ONLY=false
+export GOVEE_LAN_DISCOVERY_TIMEOUT_MS=5000
+export GOVEE_LAN_DISCOVERY_TARGETS="10.0.10.0/28,10.0.10.97,10.0.10.101"
+export GOVEE_LAN_STATIC_DEVICES='[{"ip":"10.0.10.63","deviceId":"05:36:5C:E7:53:E8:F7:24","deviceName":"Kitchen Strip","model":"H1401"},{"ip":"10.0.10.97","deviceId":"04:6E:5C:E7:53:CE:51:0E","deviceName":"Desk Lamp","model":"H1401"}]'
 ```
 
-`lanDiscoveryTargets` accepts individual IPv4 addresses and CIDR ranges, and sends unicast scan packets to the expanded IP list in addition to multicast/broadcast.
+`GOVEE_LAN_DISCOVERY_TARGETS` accepts individual IPv4 addresses and CIDR
+ranges, and sends unicast scan packets to the expanded IP list in addition to
+multicast/broadcast.
 
 For safety, CIDR expansion is capped at 512 unicast targets per refresh cycle.
 
-`lanStaticDevices` adds known devices even when cross-subnet UDP replies are blocked.
+`GOVEE_LAN_STATIC_DEVICES` adds known devices even when cross-subnet UDP replies
+are blocked.
 
 ### Compact Cards Grouped by Room
 
@@ -608,10 +590,8 @@ Backward compatibility note: if both `cloudDeviceListRefreshInterval` and `cloud
    position: "top_right",
    config: {
       refreshInterval: 600000,                // UI refresh every 10 minutes
-      enableLanControl: true,
-      lanOnly: false,
-    cloudDeviceListRefreshInterval: 3600000, // Cloud device list every 60 minutes
-    cloudDeviceStateRefreshInterval: 600000   // Cloud device state every 10 minutes
+      cloudDeviceListRefreshInterval: 3600000, // Cloud device list every 60 minutes
+      cloudDeviceStateRefreshInterval: 600000  // Cloud device state every 10 minutes
    }
 },
 ```
@@ -626,10 +606,8 @@ This keeps the display responsive without hammering the cloud API. With 25 devic
    position: "top_right",
    config: {
       refreshInterval: 300000,                // UI refresh every 5 minutes
-      enableLanControl: true,
-      lanOnly: false,
-    cloudDeviceListRefreshInterval: 1800000, // Cloud device list every 30 minutes
-    cloudDeviceStateRefreshInterval: 300000   // Cloud device state every 5 minutes
+      cloudDeviceListRefreshInterval: 1800000, // Cloud device list every 30 minutes
+      cloudDeviceStateRefreshInterval: 300000  // Cloud device state every 5 minutes
    }
 },
 ```
