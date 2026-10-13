@@ -1573,9 +1573,14 @@ module.exports = NodeHelper.create({
       return false;
     }
 
-    if (!monitor.armed || outlet.watts >= monitor.config.thresholdWatts) {
+    if (outlet.watts >= monitor.config.thresholdWatts) {
       monitor.belowSince = null;
       return false;
+    }
+
+    if (!monitor.armed) {
+      this.persistHomebridgeAutoOffArmedState(monitor, true);
+      monitor.armed = true;
     }
 
     if (monitor.belowSince === null) {

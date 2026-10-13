@@ -253,7 +253,7 @@ Privileged automation is disabled by default. To enable an automation, set its e
 | `HOMEBRIDGE_AUTO_OFF_ENABLED` | Explicitly enable outlet auto-off (`true`/`false`) |
 | `HOMEBRIDGE_AUTO_OFF_DEVICE_NAME` | Exact allowed Homebridge accessory or service name |
 | `HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS` | Low-power turn-off threshold |
-| `HOMEBRIDGE_AUTO_OFF_ARM_WATTS` | Arming wattage; must exceed the threshold |
+| `HOMEBRIDGE_AUTO_OFF_ARM_WATTS` | Optional charging telemetry threshold; must exceed the low-power threshold |
 | `HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS` | Required continuous low-power duration |
 | `HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS` | Poll interval, minimum 5000 ms |
 | `PRESENCE_DISPLAY_CONTROL_ENABLED` | Explicitly enable occupancy-driven display control (`true`/`false`) |
@@ -418,7 +418,7 @@ Set `groupCompactCardsByRoom: false` to restore the original flat compact-card g
 
 Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value on each refresh.
 
-The optional server auto-off policy can monitor one explicitly allowed Homebridge outlet and turn it off after an explicitly configured period of sustained low power. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. It is disabled unless the complete server environment policy above is present. Once charging reaches the configured arming wattage, the armed state is stored under the user's XDG state directory so a MagicMirror restart during the same charging cycle does not prevent shutoff.
+The optional server auto-off policy can monitor one explicitly allowed Homebridge outlet and turn it off after an explicitly configured period of sustained low power. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. It is disabled unless the complete server environment policy above is present. An outlet that is on and already below the low-power threshold starts the timer immediately, so a restart or a missed high-power reading cannot leave an idle outlet on indefinitely. The armed state is stored under the user's XDG state directory.
 
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 

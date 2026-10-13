@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Allowed an on outlet already below the low-power threshold to begin the auto-off timer without requiring a higher-power reading
 - Preserved an armed Homebridge outlet auto-off cycle across MagicMirror restarts
 
 ### Documentation

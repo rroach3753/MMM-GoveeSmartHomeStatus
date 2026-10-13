@@ -699,7 +699,7 @@ test("Homebridge outlet map retains writable On characteristic identifiers", () 
   });
 });
 
-test("Homebridge auto-off requires charging and sustained power below threshold", () => {
+test("Homebridge auto-off turns off an on outlet after sustained low power", () => {
   const monitor = {
     config: {
       thresholdWatts: 5,
@@ -711,7 +711,7 @@ test("Homebridge auto-off requires charging and sustained power below threshold"
   };
 
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 3, isOn: true }, 1000), false);
-  assert.equal(monitor.armed, false);
+  assert.equal(monitor.armed, true);
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 25, isOn: true }, 2000), false);
   assert.equal(monitor.armed, true);
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 3000), false);
