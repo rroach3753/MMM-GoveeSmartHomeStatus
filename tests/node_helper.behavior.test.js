@@ -638,6 +638,36 @@ test("Homebridge power matches Govee device ID when display names differ", () =>
   }]);
 });
 
+test("Homebridge outlet state overrides stale Govee cloud power state", () => {
+  const accessories = [{
+    accessoryInformation: { Name: "eBike - Pro" },
+    serviceCharacteristics: [
+      {
+        uuid: "E863F10D-079E-48FF-8F27-9C2605A29F52",
+        serviceName: "eBike - Pro",
+        value: "512.7"
+      },
+      {
+        uuid: "00000025-0000-1000-8000-0026BB765291",
+        serviceName: "eBike - Pro",
+        value: true
+      }
+    ]
+  }];
+  const devices = [{
+    deviceId: "outlet-id",
+    deviceName: "eBike - Pro",
+    powerState: false
+  }];
+
+  assert.deepEqual(helper.applyHomebridgePower(devices, helper.buildHomebridgeStatusMap(accessories)), [{
+    deviceId: "outlet-id",
+    deviceName: "eBike - Pro",
+    powerState: true,
+    powerConsumption: 512.7
+  }]);
+});
+
 test("Homebridge power map retains zero watts and rejects invalid readings", () => {
   const accessories = [
     {

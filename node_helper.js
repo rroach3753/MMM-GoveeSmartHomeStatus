@@ -1890,7 +1890,9 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      self.fetchHomebridgeAccessories(url, token, verifySSL, callback, null, username);
+      self.fetchHomebridgeAccessories(url, token, verifySSL, callback, function (accessories) {
+        return self.buildHomebridgeStatusMap(accessories);
+      }, username);
     });
   },
 
@@ -2290,6 +2292,55 @@ module.exports = NodeHelper.create({
     return powerMap;
   },
 
+  buildHomebridgeStatusMap: function (accessories) {
+    var statusMap = {};
+
+    (Array.isArray(accessories) ? accessories : []).forEach(function (accessory) {
+      var characteristics = Array.isArray(accessory.serviceCharacteristics)
+        ? accessory.serviceCharacteristics
+        : [];
+      var consumptionCharacteristic = characteristics.find(function (characteristic) {
+        return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_CURRENT_CONSUMPTION_UUID;
+      });
+      var onCharacteristic = characteristics.find(function (characteristic) {
+        return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_ON_UUID;
+      });
+      var watts;
+      var status;
+      var names;
+
+      if (!consumptionCharacteristic || consumptionCharacteristic.value === "" || consumptionCharacteristic.value === null) {
+        return;
+      }
+
+      watts = Number(consumptionCharacteristic.value);
+      if (!Number.isFinite(watts)) {
+        return;
+      }
+
+      status = {
+        watts: Math.round(watts * 10) / 10,
+        isOn: onCharacteristic ? this.normalizeBoolean(onCharacteristic.value, undefined) : undefined
+      };
+      names = [
+        accessory.accessoryInformation && accessory.accessoryInformation.Name,
+        accessory.accessoryInformation && accessory.accessoryInformation["Serial Number"],
+        consumptionCharacteristic.serviceName,
+        onCharacteristic && onCharacteristic.serviceName
+      ];
+
+      names.forEach(function (name) {
+        var normalizedName = String(name || "").trim().toLowerCase();
+
+        if (normalizedName) {
+          statusMap[normalizedName] = status;
+        }
+      });
+    }.bind(this));
+
+    return statusMap;
+  },
+
   buildHomebridgeOutletMap: function (accessories) {
     var outletMap = {};
 
@@ -2471,9 +2522,15 @@ module.exports = NodeHelper.create({
       });
 
       if (matchingIdentifier) {
-        return Object.assign({}, device, {
-          powerConsumption: powerMap[String(matchingIdentifier).toLowerCase().trim()]
-        });
+        var homebridgeStatus = powerMap[String(matchingIdentifier).toLowerCase().trim()];
+        var powerConsumption = typeof homebridgeStatus === "object" ? homebridgeStatus.watts : homebridgeStatus;
+        var enrichment = { powerConsumption: powerConsumption };
+
+        if (typeof homebridgeStatus === "object" && typeof homebridgeStatus.isOn === "boolean") {
+          enrichment.powerState = homebridgeStatus.isOn;
+        }
+
+        return Object.assign({}, device, enrichment);
       }
 
       return device;
