@@ -533,6 +533,10 @@ Module.register("MMM-GoveeSmartHomeStatus", {
       return "LAN";
     }
 
+    if (device.source === "homebridge") {
+      return "HB";
+    }
+
     return "";
   },
 

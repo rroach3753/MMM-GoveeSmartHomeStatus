@@ -230,6 +230,12 @@ test("full-width bottom bar keeps wattage visible", () => {
   assert.match(css.slice(visibleWattageIndex), /display: inline;/);
 });
 
+test("frontend labels Homebridge-sourced outlet state as HB", () => {
+  const { definition } = loadFrontendModule();
+
+  assert.equal(definition.getLanBadgeLabel({ source: "homebridge" }), "HB");
+});
+
 test("grouped bottom bar fits room cards within the available width", () => {
   const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
   const listRule = css.match(/\.full-width-bottom-bar \.compact-card-list\.grouped-by-room \{([^}]+)\}/);
@@ -662,14 +668,34 @@ test("Homebridge outlet state overrides stale Govee cloud power state", () => {
   const devices = [{
     deviceId: "outlet-id",
     deviceName: "eBike - Pro",
-    powerState: false
+    powerState: false,
+    source: "cloud"
   }];
 
   assert.deepEqual(helper.applyHomebridgePower(devices, helper.buildHomebridgeStatusMap(accessories)), [{
     deviceId: "outlet-id",
     deviceName: "eBike - Pro",
     powerState: true,
-    powerConsumption: 512.7
+    powerConsumption: 512.7,
+    source: "homebridge"
+  }]);
+});
+
+test("Homebridge enrichment preserves cloud fallback without usable outlet state", () => {
+  const device = {
+    deviceId: "outlet-id",
+    deviceName: "Cloud Outlet",
+    powerState: false,
+    source: "cloud"
+  };
+
+  assert.deepEqual(helper.applyHomebridgePower([device], {}), [device]);
+  assert.deepEqual(helper.applyHomebridgePower([device], { "cloud outlet": { watts: 0 } }), [{
+    deviceId: "outlet-id",
+    deviceName: "Cloud Outlet",
+    powerState: false,
+    powerConsumption: 0,
+    source: "cloud"
   }]);
 });
 

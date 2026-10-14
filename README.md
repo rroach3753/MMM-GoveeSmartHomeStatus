@@ -12,7 +12,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Display list of Govee smart devices with live online and power state
 - Display temperature and humidity when the device reports them
 - Color-coded online/offline status indicators
-- Source badges for connectivity path: `CLOUD`, `LAN`, and `LAN+`
+- Source badges for connectivity path: `CLOUD`, `LAN`, `LAN+`, and `HB` (Homebridge)
 - Real-time device list updates
 - Refreshes update in place after the first render without flashing the module
 - Configurable refresh interval
@@ -416,7 +416,7 @@ Set `groupCompactCardsByRoom: false` to restore the original flat compact-card g
 
 ### Homebridge Power Consumption (Outlet Wattage)
 
-Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value and the matching service's Homebridge `On` state on each refresh. Positive measured wattage is treated as authoritative evidence that the outlet is on, preventing stale cloud or Homebridge state from showing an actively drawing outlet as off.
+Display live wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives real-time power data from the outlet via its AWS IoT channel and exposes it as a `CurrentConsumption` Eve characteristic. This module reads that value and the matching service's Homebridge `On` state on each refresh. Positive measured wattage is treated as authoritative evidence that the outlet is on, preventing stale cloud or Homebridge state from showing an actively drawing outlet as off. Outlets using Homebridge state display an `HB` source badge; if Homebridge is unavailable, unmatched, or lacks usable state, the existing Govee cloud or LAN-backed state remains in use.
 
 The optional server auto-off policy can monitor one explicitly allowed Homebridge outlet and turn it off after an explicitly configured period of sustained low power. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. It is disabled unless the complete server environment policy above is present. An outlet that is on and already below the low-power threshold starts the timer immediately, so a restart or a missed high-power reading cannot leave an idle outlet on indefinitely. The armed state is stored under the user's XDG state directory.
 

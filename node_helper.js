@@ -2542,6 +2542,7 @@ module.exports = NodeHelper.create({
 
         if (typeof homebridgeStatus === "object" && typeof homebridgeStatus.isOn === "boolean") {
           enrichment.powerState = homebridgeStatus.isOn;
+          enrichment.source = "homebridge";
         }
 
         return Object.assign({}, device, enrichment);
