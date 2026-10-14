@@ -2302,9 +2302,12 @@ module.exports = NodeHelper.create({
       var consumptionCharacteristic = characteristics.find(function (characteristic) {
         return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_CURRENT_CONSUMPTION_UUID;
       });
-      var onCharacteristic = characteristics.find(function (characteristic) {
+      var onCharacteristics = characteristics.filter(function (characteristic) {
         return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_ON_UUID;
       });
+      var onCharacteristic = onCharacteristics.find(function (characteristic) {
+        return String(characteristic.serviceName || "") === String(consumptionCharacteristic && consumptionCharacteristic.serviceName || "");
+      }) || onCharacteristics[0];
       var watts;
       var status;
       var names;
@@ -2320,7 +2323,7 @@ module.exports = NodeHelper.create({
 
       status = {
         watts: Math.round(watts * 10) / 10,
-        isOn: onCharacteristic ? this.normalizeBoolean(onCharacteristic.value, undefined) : undefined
+        isOn: this.resolveHomebridgeOutletPowerState(onCharacteristic, watts)
       };
       names = [
         accessory.accessoryInformation && accessory.accessoryInformation.Name,
@@ -2341,6 +2344,14 @@ module.exports = NodeHelper.create({
     return statusMap;
   },
 
+  resolveHomebridgeOutletPowerState: function (onCharacteristic, watts) {
+    if (Number.isFinite(watts) && Math.round(watts * 10) / 10 > 0) {
+      return true;
+    }
+
+    return onCharacteristic ? this.normalizeBoolean(onCharacteristic.value, undefined) : undefined;
+  },
+
   buildHomebridgeOutletMap: function (accessories) {
     var outletMap = {};
 
@@ -2351,9 +2362,12 @@ module.exports = NodeHelper.create({
       var consumptionCharacteristic = characteristics.find(function (characteristic) {
         return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_CURRENT_CONSUMPTION_UUID;
       });
-      var onCharacteristic = characteristics.find(function (characteristic) {
+      var onCharacteristics = characteristics.filter(function (characteristic) {
         return characteristic && String(characteristic.uuid || "").toUpperCase() === HOMEBRIDGE_ON_UUID;
       });
+      var onCharacteristic = onCharacteristics.find(function (characteristic) {
+        return String(characteristic.serviceName || "") === String(consumptionCharacteristic && consumptionCharacteristic.serviceName || "");
+      }) || onCharacteristics[0];
       var watts;
       var outlet;
       var names;
@@ -2369,7 +2383,7 @@ module.exports = NodeHelper.create({
 
       outlet = {
         watts: Math.round(watts * 10) / 10,
-        isOn: this.normalizeBoolean(onCharacteristic.value, undefined),
+        isOn: this.resolveHomebridgeOutletPowerState(onCharacteristic, watts),
         uniqueId: String(accessory.uniqueId),
         characteristicType: String(onCharacteristic.type)
       };

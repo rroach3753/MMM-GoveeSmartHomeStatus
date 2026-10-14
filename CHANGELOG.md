@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Used the Homebridge outlet `On` characteristic with wattage so active Pro outlets no longer display stale Govee cloud state as off
+- Used service-matched Homebridge outlet state and treated positive wattage as `ON` so active Pro outlets no longer display stale state as off
 - Allowed an on outlet already below the low-power threshold to begin the auto-off timer without requiring a higher-power reading
 - Preserved an armed Homebridge outlet auto-off cycle across MagicMirror restarts
 

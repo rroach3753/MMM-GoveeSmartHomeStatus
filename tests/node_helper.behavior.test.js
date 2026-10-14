@@ -649,8 +649,13 @@ test("Homebridge outlet state overrides stale Govee cloud power state", () => {
       },
       {
         uuid: "00000025-0000-1000-8000-0026BB765291",
+        serviceName: "Unrelated Switch",
+        value: false
+      },
+      {
+        uuid: "00000025-0000-1000-8000-0026BB765291",
         serviceName: "eBike - Pro",
-        value: true
+        value: false
       }
     ]
   }];
@@ -666,6 +671,12 @@ test("Homebridge outlet state overrides stale Govee cloud power state", () => {
     powerState: true,
     powerConsumption: 512.7
   }]);
+});
+
+test("Homebridge outlet state preserves on at zero watts", () => {
+  assert.equal(helper.resolveHomebridgeOutletPowerState({ value: true }, 0), true);
+  assert.equal(helper.resolveHomebridgeOutletPowerState({ value: false }, 0), false);
+  assert.equal(helper.resolveHomebridgeOutletPowerState({ value: false }, 500), true);
 });
 
 test("Homebridge power map retains zero watts and rejects invalid readings", () => {
