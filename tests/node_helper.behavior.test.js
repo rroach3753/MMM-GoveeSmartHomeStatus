@@ -752,13 +752,13 @@ test("Homebridge outlet map retains writable On characteristic identifiers", () 
 
   assert.deepEqual(helper.buildHomebridgeOutletMap(accessories), {
     "ebike - pro": {
-      watts: 4.3,
+      watts: 4.25,
       isOn: true,
       uniqueId: "outlet-service-id",
       characteristicType: "On"
     },
     "outlet pro": {
-      watts: 4.3,
+      watts: 4.25,
       isOn: true,
       uniqueId: "outlet-service-id",
       characteristicType: "On"
@@ -766,12 +766,35 @@ test("Homebridge outlet map retains writable On characteristic identifiers", () 
   });
 });
 
+test("Homebridge auto-off rejects invalid power telemetry and preserves explicit outlet state", () => {
+  function outletMap(value, isOn = true) {
+    return helper.buildHomebridgeOutletMap([{
+      uniqueId: "outlet",
+      accessoryInformation: { Name: "eBike - Pro" },
+      serviceCharacteristics: [
+        { uuid: "E863F10D-079E-48FF-8F27-9C2605A29F52", value },
+        { uuid: "00000025-0000-1000-8000-0026BB765291", type: "On", value: isOn }
+      ]
+    }]);
+  }
+
+  for (const value of [null, undefined, "", "  ", false, true, [], {}, -1, NaN, Infinity, "unknown"]) {
+    assert.deepEqual(outletMap(value), {}, "reject invalid wattage: " + String(value));
+  }
+  assert.equal(outletMap(0)["ebike - pro"].watts, 0);
+  assert.equal(outletMap("4.25")["ebike - pro"].watts, 4.25);
+  assert.equal(outletMap(6.01)["ebike - pro"].watts, 6.01);
+  assert.equal(outletMap(1, false)["ebike - pro"].isOn, false);
+  assert.equal(outletMap(1, "unknown")["ebike - pro"].isOn, undefined);
+});
+
 test("Homebridge auto-off turns off an on outlet after sustained low power", () => {
   const monitor = {
     config: {
       thresholdWatts: 5,
       armWatts: 20,
-      belowDuration: 300000
+      belowDuration: 300000,
+      pollInterval: 30000
     },
     armed: false,
     belowSince: null
@@ -782,8 +805,87 @@ test("Homebridge auto-off turns off an on outlet after sustained low power", () 
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 25, isOn: true }, 2000), false);
   assert.equal(monitor.armed, true);
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 3000), false);
+  for (let now = 33000; now < 303000; now += 30000) {
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, now), false);
+  }
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 302999), false);
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 303000), true);
+});
+
+test("Homebridge auto-off resets the low-power timer on invalid state, gaps, and resumed charging", () => {
+  for (const interruption of [
+    null,
+    { watts: NaN, isOn: true },
+    { watts: -1, isOn: true },
+    { watts: 1 },
+    { watts: 1, isOn: false },
+    { watts: 6, isOn: true },
+    { watts: 25, isOn: true }
+  ]) {
+    const monitor = {
+      config: { thresholdWatts: 6, armWatts: 20, belowDuration: 300000, pollInterval: 30000 },
+      armed: true,
+      belowSince: null
+    };
+    for (let now = 0; now <= 270000; now += 30000) {
+      assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 1, isOn: true }, now), false);
+    }
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, interruption, 300000), false);
+    assert.equal(monitor.belowSince, null);
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 1, isOn: true }, 330000), false);
+    assert.equal(monitor.belowSince, 330000);
+  }
+
+  for (const now of [60001, -1]) {
+    const monitor = {
+      config: { thresholdWatts: 6, armWatts: 20, belowDuration: 300000, pollInterval: 30000 },
+      armed: true,
+      belowSince: 0,
+      lastReadingAt: 0
+    };
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 1, isOn: true }, now), false);
+    assert.equal(monitor.belowSince, now);
+  }
+});
+
+test("Homebridge auto-off polling resets low-power time on errors or missing accessories without writing", () => {
+  const originalFetch = helper.fetchHomebridgeOutletMap;
+  const originalSchedule = helper.scheduleHomebridgeAutoOffPoll;
+  const originalSetOutlet = helper.setHomebridgeOutletState;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const previousMonitors = helper.homebridgeAutoOffMonitors;
+  let scheduled = 0;
+  let messages = 0;
+
+  try {
+    console.error = console.warn = () => { messages += 1; };
+    helper.scheduleHomebridgeAutoOffPoll = () => { scheduled += 1; };
+    helper.setHomebridgeOutletState = () => assert.fail("No outlet write during telemetry interruptions");
+    for (const error of [new Error("timeout"), null]) {
+      const monitor = {
+        config: { deviceName: "eBike - Pro" },
+        belowSince: 0,
+        lastReadingAt: 0,
+        armed: true
+      };
+      helper.homebridgeAutoOffMonitors = { test: monitor };
+      helper.fetchHomebridgeOutletMap = (url, username, password, verifySSL, callback) => callback(error, {});
+      helper.pollHomebridgeAutoOff("test");
+      assert.equal(monitor.belowSince, null);
+      assert.equal(monitor.lastReadingAt, null);
+      assert.equal(monitor.armed, true);
+    }
+    assert.equal(scheduled, 2);
+    assert.equal(messages, 2);
+  } finally {
+    helper.fetchHomebridgeOutletMap = originalFetch;
+    helper.scheduleHomebridgeAutoOffPoll = originalSchedule;
+    helper.setHomebridgeOutletState = originalSetOutlet;
+    helper.homebridgeAutoOffMonitors = previousMonitors;
+    console.error = originalError;
+    console.warn = originalWarn;
+  }
 });
 
 test("Homebridge auto-off preserves an armed charging cycle across restarts", () => {

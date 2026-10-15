@@ -1456,6 +1456,7 @@ module.exports = NodeHelper.create({
       configKey: configKey,
       armed: monitorId === SERVER_AUTO_OFF_MONITOR_ID && this.loadHomebridgeAutoOffArmedState(config),
       belowSince: null,
+      lastReadingAt: null,
       shuttingOff: false,
       persistState: monitorId === SERVER_AUTO_OFF_MONITOR_ID,
       timer: null
@@ -1510,13 +1511,22 @@ module.exports = NodeHelper.create({
         }
 
         if (error) {
+          monitor.belowSince = null;
+          monitor.lastReadingAt = null;
           console.error("[MMM-GoveeSmartHomeStatus] Homebridge auto-off monitor error:", error.message);
           self.scheduleHomebridgeAutoOffPoll(monitorId);
           return;
         }
 
         outlet = outletMap[String(monitor.config.deviceName).toLowerCase()];
-        if (!outlet || !self.processHomebridgeAutoOffReading(monitor, outlet, Date.now())) {
+        if (!outlet) {
+          monitor.belowSince = null;
+          monitor.lastReadingAt = null;
+          console.warn("[MMM-GoveeSmartHomeStatus] Auto-off timer reset: no usable outlet telemetry for " + monitor.config.deviceName);
+          self.scheduleHomebridgeAutoOffPoll(monitorId);
+          return;
+        }
+        if (!self.processHomebridgeAutoOffReading(monitor, outlet, Date.now())) {
           self.scheduleHomebridgeAutoOffPoll(monitorId);
           return;
         }
@@ -1539,7 +1549,9 @@ module.exports = NodeHelper.create({
               self.persistHomebridgeAutoOffArmedState(monitor, false);
               monitor.armed = false;
               monitor.belowSince = null;
-              console.log("[MMM-GoveeSmartHomeStatus] Turned off " + monitor.config.deviceName + " after sustained low power");
+              console.log("[MMM-GoveeSmartHomeStatus] Turned off " + monitor.config.deviceName +
+                " after sustained low power: " + outlet.watts + "W, threshold " +
+                monitor.config.thresholdWatts + "W, duration " + monitor.config.belowDuration + "ms");
             }
 
             self.scheduleHomebridgeAutoOffPoll(monitorId);
@@ -1552,14 +1564,21 @@ module.exports = NodeHelper.create({
   },
 
   processHomebridgeAutoOffReading: function (monitor, outlet, now) {
-    if (!outlet || outlet.isOn === false || !Number.isFinite(outlet.watts)) {
-      if (monitor.armed) {
+    if (!outlet || outlet.isOn !== true || !Number.isFinite(outlet.watts) || outlet.watts < 0) {
+      if (outlet && outlet.isOn === false && monitor.armed) {
         this.persistHomebridgeAutoOffArmedState(monitor, false);
+        monitor.armed = false;
       }
-      monitor.armed = false;
       monitor.belowSince = null;
+      monitor.lastReadingAt = null;
       return false;
     }
+
+    if (Number.isFinite(monitor.lastReadingAt) &&
+        (now < monitor.lastReadingAt || now - monitor.lastReadingAt > monitor.config.pollInterval * 2)) {
+      monitor.belowSince = null;
+    }
+    monitor.lastReadingAt = now;
 
     if (outlet.watts >= monitor.config.armWatts) {
       if (!monitor.armed) {
@@ -1585,6 +1604,11 @@ module.exports = NodeHelper.create({
 
     if (monitor.belowSince === null) {
       monitor.belowSince = now;
+      if (monitor.persistState) {
+        console.log("[MMM-GoveeSmartHomeStatus] Auto-off low-power timer started for " +
+          monitor.config.deviceName + ": " + outlet.watts + "W, threshold " +
+          monitor.config.thresholdWatts + "W, required duration " + monitor.config.belowDuration + "ms");
+      }
       return false;
     }
 
@@ -2376,14 +2400,19 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      watts = Number(consumptionCharacteristic.value);
-      if (!Number.isFinite(watts) || onCharacteristic.canWrite === false) {
+      var rawWatts = consumptionCharacteristic.value;
+      if ((typeof rawWatts !== "number" && typeof rawWatts !== "string") ||
+          (typeof rawWatts === "string" && !rawWatts.trim())) {
+        return;
+      }
+      watts = Number(rawWatts);
+      if (!Number.isFinite(watts) || watts < 0 || onCharacteristic.canWrite === false) {
         return;
       }
 
       outlet = {
-        watts: Math.round(watts * 10) / 10,
-        isOn: this.resolveHomebridgeOutletPowerState(onCharacteristic, watts),
+        watts: watts,
+        isOn: this.normalizeBoolean(onCharacteristic.value, undefined),
         uniqueId: String(accessory.uniqueId),
         characteristicType: String(onCharacteristic.type)
       };

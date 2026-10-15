@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Reset outlet auto-off timers across telemetry failures and polling gaps, reject missing/invalid wattage instead of coercing it to zero, and require explicit outlet-on state for control
+- Logged wattage and policy details when auto-off timers start and outlets are switched off
 - Used service-matched Homebridge outlet state and treated positive wattage as `ON` so active Pro outlets no longer display stale state as off
 - Allowed an on outlet already below the low-power threshold to begin the auto-off timer without requiring a higher-power reading
 - Preserved an armed Homebridge outlet auto-off cycle across MagicMirror restarts

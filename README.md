@@ -420,6 +420,10 @@ Display live wattage on outlet device cards by connecting to the Homebridge REST
 
 The optional server auto-off policy can monitor one explicitly allowed Homebridge outlet and turn it off after an explicitly configured period of sustained low power. This local polling does not use the Govee OpenAPI and is independent of `refreshInterval`. It is disabled unless the complete server environment policy above is present. An outlet that is on and already below the low-power threshold starts the timer immediately, so a restart or a missed high-power reading cannot leave an idle outlet on indefinitely. The armed state is stored under the user's XDG state directory.
 
+Auto-off requires an explicit Homebridge `On` state and valid, non-negative wattage; unlike the display, it does not infer outlet state from positive wattage. Missing or invalid telemetry, request errors, readings at or above the threshold, and gaps longer than twice the poll interval reset the low-power timer. Control uses unrounded wattage. Timer-start and successful shutoff logs include wattage and the configured threshold/duration.
+
+Low power is only a completion heuristic, not a battery-percentage measurement. A charger can pause or taper before the battery is full. Measure its actual full-charge draw before choosing a threshold and duration; valid low readings below that threshold for the entire duration will still switch the outlet off. Run only one MagicMirror instance to avoid independent automation timers.
+
 Homebridge must run in insecure mode (`-I`) so config-ui-x can provide `/api/accessories`. In the Homebridge UI, open **Settings**, enable **Homebridge Insecure Mode**, and restart Homebridge. This setting allows local accessory API access; it does not disable Homebridge UI authentication.
 
 The module matches Homebridge accessories to Govee devices by device ID, with a case-insensitive device-name fallback. No additional Homebridge plugins are required — only the built-in config-ui-x REST API.
