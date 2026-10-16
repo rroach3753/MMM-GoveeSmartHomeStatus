@@ -1592,14 +1592,9 @@ module.exports = NodeHelper.create({
       return false;
     }
 
-    if (outlet.watts >= monitor.config.thresholdWatts) {
+    if (!monitor.armed || outlet.watts >= monitor.config.thresholdWatts) {
       monitor.belowSince = null;
       return false;
-    }
-
-    if (!monitor.armed) {
-      this.persistHomebridgeAutoOffArmedState(monitor, true);
-      monitor.armed = true;
     }
 
     if (monitor.belowSince === null) {
@@ -1645,7 +1640,13 @@ module.exports = NodeHelper.create({
       return false;
     }
 
+    if (state.armed === true && state.chargingObserved !== true) {
+      console.warn("[MMM-GoveeSmartHomeStatus] Ignoring legacy auto-off armed state; waiting for observed charging at " + config.armWatts + "W or above");
+      return false;
+    }
+
     return state.armed === true &&
+      state.chargingObserved === true &&
       state.url === expected.url &&
       state.deviceName === expected.deviceName &&
       state.thresholdWatts === expected.thresholdWatts &&
@@ -1676,7 +1677,8 @@ module.exports = NodeHelper.create({
     }
 
     state = Object.assign(this.getHomebridgeAutoOffStateIdentity(monitor.config), {
-      armed: true
+      armed: true,
+      chargingObserved: true
     });
 
     try {

@@ -788,10 +788,30 @@ test("Homebridge auto-off rejects invalid power telemetry and preserves explicit
   assert.equal(outletMap(1, "unknown")["ebike - pro"].isOn, undefined);
 });
 
-test("Homebridge auto-off turns off an on outlet after sustained low power", () => {
+test("Homebridge auto-off does not arm below the charging prerequisite", () => {
+  for (const watts of [0, 5, 6, 19.99]) {
+    const monitor = {
+      config: { thresholdWatts: 6, armWatts: 20, belowDuration: 300000, pollInterval: 30000 },
+      armed: false,
+      belowSince: null
+    };
+
+    for (let now = 0; now <= 600000; now += 30000) {
+      assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts, isOn: true }, now), false);
+      assert.equal(monitor.armed, false);
+      assert.equal(monitor.belowSince, null);
+    }
+
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 20, isOn: true }, 630000), false);
+    assert.equal(monitor.armed, true);
+    assert.equal(monitor.belowSince, null);
+  }
+});
+
+test("Homebridge auto-off requires observed charging then five minutes below 6 W", () => {
   const monitor = {
     config: {
-      thresholdWatts: 5,
+      thresholdWatts: 6,
       armWatts: 20,
       belowDuration: 300000,
       pollInterval: 30000
@@ -801,15 +821,17 @@ test("Homebridge auto-off turns off an on outlet after sustained low power", () 
   };
 
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 3, isOn: true }, 1000), false);
-  assert.equal(monitor.armed, true);
+  assert.equal(monitor.armed, false);
   assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 25, isOn: true }, 2000), false);
   assert.equal(monitor.armed, true);
-  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 3000), false);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 5.9, isOn: true }, 3000), false);
   for (let now = 33000; now < 303000; now += 30000) {
-    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, now), false);
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 5.9, isOn: true }, now), false);
   }
-  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 302999), false);
-  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 4.9, isOn: true }, 303000), true);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 5.9, isOn: true }, 302999), false);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 5.9, isOn: true }, 303000), true);
+  assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 6, isOn: true }, 303001), false);
+  assert.equal(monitor.belowSince, null);
 });
 
 test("Homebridge auto-off resets the low-power timer on invalid state, gaps, and resumed charging", () => {
@@ -833,7 +855,7 @@ test("Homebridge auto-off resets the low-power timer on invalid state, gaps, and
     assert.equal(helper.processHomebridgeAutoOffReading(monitor, interruption, 300000), false);
     assert.equal(monitor.belowSince, null);
     assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 1, isOn: true }, 330000), false);
-    assert.equal(monitor.belowSince, 330000);
+    assert.equal(monitor.belowSince, interruption && interruption.isOn === false ? null : 330000);
   }
 
   for (const now of [60001, -1]) {
@@ -895,7 +917,9 @@ test("Homebridge auto-off preserves an armed charging cycle across restarts", ()
     url: "https://homebridge.local:8581",
     deviceName: "eBike - Pro",
     thresholdWatts: 6,
-    armWatts: 20
+    armWatts: 20,
+    belowDuration: 300000,
+    pollInterval: 30000
   };
   const monitor = {
     config,
@@ -907,15 +931,38 @@ test("Homebridge auto-off preserves an armed charging cycle across restarts", ()
   process.env.XDG_STATE_HOME = stateHome;
 
   try {
-    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 25, isOn: true }, 1000), false);
+    const statePath = helper.getHomebridgeAutoOffStatePath();
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({
+      ...helper.getHomebridgeAutoOffStateIdentity(config),
+      armed: true
+    }));
+    assert.equal(helper.loadHomebridgeAutoOffArmedState(config), false);
+    for (let now = 0; now <= 300000; now += 30000) {
+      assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 0, isOn: true }, now), false);
+    }
+    assert.equal(monitor.armed, false);
+
+    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 25, isOn: true }, 330000), false);
     assert.equal(helper.loadHomebridgeAutoOffArmedState(config), true);
+    assert.equal(JSON.parse(fs.readFileSync(statePath, "utf8")).chargingObserved, true);
     assert.equal(helper.loadHomebridgeAutoOffArmedState({
       ...config,
       deviceName: "Different Outlet"
     }), false);
 
-    monitor.armed = true;
-    assert.equal(helper.processHomebridgeAutoOffReading(monitor, { watts: 0, isOn: false }, 2000), false);
+    const restartedMonitor = {
+      ...monitor,
+      armed: helper.loadHomebridgeAutoOffArmedState(config),
+      belowSince: null,
+      lastReadingAt: null
+    };
+    for (let now = 360000; now < 660000; now += 30000) {
+      assert.equal(helper.processHomebridgeAutoOffReading(restartedMonitor, { watts: 5, isOn: true }, now), false);
+    }
+    assert.equal(helper.processHomebridgeAutoOffReading(restartedMonitor, { watts: 5, isOn: true }, 660000), true);
+    assert.equal(helper.processHomebridgeAutoOffReading(restartedMonitor, { watts: 0, isOn: false }, 690000), false);
+    assert.equal(restartedMonitor.armed, false);
     assert.equal(helper.loadHomebridgeAutoOffArmedState(config), false);
   } finally {
     if (previousStateHome === undefined) {
