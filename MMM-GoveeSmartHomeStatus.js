@@ -1,5 +1,3 @@
-/* global Module */
-
 Module.register("MMM-GoveeSmartHomeStatus", {
   defaults: {
     title: "Govee Devices",
@@ -33,6 +31,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   },
 
   start: function () {
+    this.stopped = false;
     this.instanceId = this.identifier || this.name;
     this.hasRenderedData = false;
     this.dataState = {
@@ -46,7 +45,16 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     this.requestBackendData();
   },
 
+  stop: function () {
+    this.stopped = true;
+    clearTimeout(this.configRetryTimer);
+    clearTimeout(this.refreshTimer);
+    this.configRetryTimer = null;
+    this.refreshTimer = null;
+  },
+
   requestBackendData: function () {
+    if (this.stopped) return;
     var self = this;
     var requestTimeout = this.getRequestTimeout();
 
@@ -94,6 +102,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   },
 
   socketNotificationReceived: function (notification, payload) {
+    if (this.stopped) return;
     var self = this;
     var data = payload || {};
 

@@ -230,6 +230,19 @@ LAN discovery can send privileged network probes, so its policy is accepted
 only from the MagicMirror server environment. Renderer configuration values
 with these names are ignored.
 
+When upgrading from 2.x to 3.0.0, move renderer LAN settings to the launch
+environment using these replacements:
+
+- `enableLanControl` -> `GOVEE_LAN_CONTROL_ENABLED`
+- `lanOnly` -> `GOVEE_LAN_ONLY`
+- `lanDiscoveryTimeout` -> `GOVEE_LAN_DISCOVERY_TIMEOUT_MS`
+- `lanDiscoveryTargets` -> `GOVEE_LAN_DISCOVERY_TARGETS`
+- `lanStaticDevices` -> `GOVEE_LAN_STATIC_DEVICES`
+
+Discovery targets become a comma-separated IPv4/CIDR list; static devices
+remain an array encoded as JSON. Restart MagicMirror after updating its
+service/PM2 environment. LAN discovery stays disabled until explicitly enabled.
+
 | Environment variable | Description | Default |
 | -------------------- | ----------- | ------- |
 | `GOVEE_LAN_CONTROL_ENABLED` | Enable LAN discovery | `false` |
@@ -625,7 +638,32 @@ This is a balanced option for moderate device counts. With 25 devices, it stays 
 
 ## Dependencies
 
-None. Uses only Node.js built-in modules (`https`, `dgram`).
+The module uses Node.js built-ins for HTTP and UDP, plus `bonjour-service` for
+optional Homebridge mDNS discovery.
+
+## Development and Compatibility
+
+```sh
+npm ci --ignore-scripts
+npm run lint
+npm test
+```
+
+Run development checks on Node.js 20.19 or newer. ESLint applies recommended
+common-error rules with separate browser and Node.js globals; CI runs lint
+and tests on Node.js 20, 22, and 24.
+
+Homebridge networking and accessory mapping live in
+[`lib/homebridge.js`](lib/homebridge.js); the helper retains the existing method
+entry points. Configuration and socket notification names remain unchanged.
+Stopping the helper cancels automation timers and LAN/mDNS discovery; late
+callbacks from the previous lifecycle cannot restart monitors or publish data.
+Automation still runs independently of whether the display is visible.
+
+All CSS is now scoped beneath `.mmm-govee-smartHome`. Existing class names are
+retained, but custom overrides may need that wrapper prefix to match specificity.
+The legacy `noApiKeyMessage` option remains accepted but is unused; API errors
+are supplied by the server.
 
 ## License
 

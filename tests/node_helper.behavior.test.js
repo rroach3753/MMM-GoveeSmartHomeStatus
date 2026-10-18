@@ -24,6 +24,124 @@ Module._load = function (request, parent, isMain) {
 const helper = require("../node_helper");
 Module._load = originalLoad;
 
+test("stop clears monitors and ignores late renderer and automation completions", () => {
+  const originalInitialize = helper.initializeServerAutomations;
+  const originalFetch = helper.fetchGoveeDevices;
+  const originalSend = helper.sendSocketNotification;
+  const originalPower = helper.fetchHomebridgeOutletMap;
+  const sent = [];
+  let finishFetch;
+  let finishPower;
+  helper.initializeServerAutomations = () => {};
+  helper.start();
+  helper.fetchGoveeDevices = (_options, callback) => { finishFetch = callback; };
+  helper.fetchHomebridgeOutletMap = (...args) => { finishPower = args[4]; };
+  helper.sendSocketNotification = (...args) => sent.push(args);
+  try {
+    helper.handleDevicesRequest({ instanceId: "review" });
+    helper.configureHomebridgeAutoOff("review", {
+      enabled: true, deviceName: "Outlet", pollInterval: 60000
+    });
+    const timer = helper.homebridgeAutoOffMonitors.review.timer;
+    clearTimeout(timer);
+    helper.pollHomebridgeAutoOff("review");
+    helper.stop();
+    finishFetch(null, [{ deviceId: "stale" }]);
+    finishPower(null, {});
+    assert.equal(sent.length, 0);
+    assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), []);
+    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), []);
+    assert.equal(helper.rendererFetchState, null);
+    helper.start();
+    finishFetch(null, [{ deviceId: "previous-lifecycle" }]);
+    assert.equal(sent.length, 0);
+  } finally {
+    helper.stop?.();
+    helper.initializeServerAutomations = originalInitialize;
+    helper.fetchGoveeDevices = originalFetch;
+    helper.fetchHomebridgeOutletMap = originalPower;
+    helper.sendSocketNotification = originalSend;
+    helper.stopped = false;
+  }
+});
+
+test("Homebridge map entry points preserve mapping through the shared lookup flow", () => {
+  const originalToken = helper.withHomebridgeToken;
+  const originalAccessories = helper.fetchHomebridgeAccessories;
+  helper.homebridgeFallbackUrls = {};
+  helper.withHomebridgeToken = (_url, _user, _password, _verify, callback) => callback(null, "test-token");
+  helper.fetchHomebridgeAccessories = (_url, _token, _verify, callback, mapper) => callback(null, mapper([]));
+  try {
+    let callbacks = 0;
+    for (const method of ["fetchHomebridgePowerMap", "fetchHomebridgeOutletMap", "fetchHomebridgeOccupancyMap"]) {
+      helper[method]("https://trusted.example", "user", "password", true, (error, result) => {
+        assert.equal(error, null);
+        assert.deepEqual(result, {});
+        callbacks++;
+      }, false);
+    }
+    assert.equal(callbacks, 3);
+  } finally {
+    helper.withHomebridgeToken = originalToken;
+    helper.fetchHomebridgeAccessories = originalAccessories;
+  }
+});
+
+test("late Homebridge authentication cannot refill caches after shutdown", () => {
+  const originalAuthenticate = helper.authenticateHomebridge;
+  let complete;
+  let callbacks = 0;
+  helper.homebridgeTokenCache = new Map();
+  helper.authenticateHomebridge = (...args) => { complete = args[4]; };
+  try {
+    helper.withHomebridgeToken("https://trusted.example", "user", "password", true, () => { callbacks++; });
+    helper.stop();
+    complete(null, "stale-token", Date.now() + 60000);
+    assert.equal(callbacks, 0);
+    assert.equal(helper.homebridgeTokenCache.size, 0);
+  } finally {
+    helper.authenticateHomebridge = originalAuthenticate;
+    helper.stopped = false;
+  }
+});
+
+test("module styles do not define unscoped selectors", () => {
+  const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
+  for (const match of css.matchAll(/(?:^|[{},])\s*(\.[\w-][^{},]*)\s*(?=[{,])/g)) {
+    assert.ok(match[1].startsWith(".mmm-govee-smartHome"), match[1]);
+  }
+});
+
+test("shutdown closes pending LAN sockets and cancels discovery callbacks", () => {
+  const dgram = require("node:dgram");
+  const originalCreate = dgram.createSocket;
+  const originalTimeout = global.setTimeout;
+  const timeouts = [];
+  let closed = 0;
+  let callbacks = 0;
+  dgram.createSocket = () => {
+    const socket = new EventEmitter();
+    socket.bind = () => {};
+    socket.close = () => { closed++; };
+    return socket;
+  };
+  global.setTimeout = (callback) => { timeouts.push(callback); return {}; };
+  try {
+    helper.discoverLanDevices(1000, [], () => { callbacks++; });
+    helper.fetchLanDeviceStatuses([{ localIp: "192.0.2.10" }], 1000, () => { callbacks++; });
+    assert.equal(helper.pendingCleanups.size, 2);
+    helper.stop();
+    timeouts.forEach((callback) => callback());
+    assert.equal(closed, 2);
+    assert.equal(callbacks, 0);
+    assert.equal(helper.pendingCleanups.size, 0);
+  } finally {
+    dgram.createSocket = originalCreate;
+    global.setTimeout = originalTimeout;
+    helper.stopped = false;
+  }
+});
+
 test("both UDP listeners reject malformed JSON shapes without throwing", () => {
   const dgram = require("node:dgram");
   const originalCreate = dgram.createSocket;
@@ -179,6 +297,8 @@ function loadFrontendModule() {
       createElement() {
         return {
           children: [],
+          textContent: "",
+          style: {},
           classList: { add() {} },
           appendChild(child) {
             this.children.push(child);
@@ -199,6 +319,47 @@ function loadFrontendModule() {
   vm.runInNewContext(source, context);
   return { definition, timers };
 }
+
+test("renders compact room cards and full cards without losing power readings", () => {
+  const { definition } = loadFrontendModule();
+  const moduleInstance = {
+    ...definition,
+    config: { ...definition.defaults, compactCards: true, roomOrder: ["Office"] },
+    dataState: {
+      loading: false,
+      devices: [
+        { deviceName: "Office - Desk Light", online: true, powerState: true, powerConsumption: 0, source: "homebridge" },
+        { deviceName: "Kitchen - Lamp", online: false, powerState: false, source: "cloud" }
+      ]
+    }
+  };
+  const text = (element) => [element.textContent, ...element.children.map(text)].join(" ");
+  const compact = text(moduleInstance.getDom());
+  assert.match(compact, /Office/);
+  assert.match(compact, /Desk Light/);
+  assert.match(compact, /HB/);
+  assert.match(compact, /0W/);
+  moduleInstance.config.compactCards = false;
+  assert.match(text(moduleInstance.getDom()), /OFFLINE/);
+  moduleInstance.dataState.devices = [];
+  assert.match(text(moduleInstance.getDom()), /No devices available/);
+});
+
+test("frontend stop cancels retries and ignores late notifications", () => {
+  const { definition, timers } = loadFrontendModule();
+  let requests = 0;
+  const moduleInstance = {
+    ...definition, config: { ...definition.defaults }, identifier: "review",
+    sendSocketNotification() { requests++; }, updateDom() {}
+  };
+  moduleInstance.start();
+  moduleInstance.stop();
+  assert.equal(timers.size, 0);
+  moduleInstance.requestBackendData();
+  moduleInstance.socketNotificationReceived("GOVEE_DEVICES_DATA", { instanceId: "review", devices: [] });
+  assert.equal(requests, 1);
+  assert.equal(timers.size, 0);
+});
 
 test("frontend continues retrying after more than three connection failures", () => {
   const { definition, timers } = loadFrontendModule();

@@ -2,8 +2,23 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-18
+
+### Breaking Changes
+
+- Move LAN discovery policy from renderer configuration to the MagicMirror
+  process environment: use `GOVEE_LAN_CONTROL_ENABLED`, `GOVEE_LAN_ONLY`,
+  `GOVEE_LAN_DISCOVERY_TIMEOUT_MS`, `GOVEE_LAN_DISCOVERY_TARGETS`, and
+  `GOVEE_LAN_STATIC_DEVICES`. Legacy renderer LAN settings are ignored.
+- Restart MagicMirror after setting server LAN policy. Discovery targets use
+  a comma-separated IPv4/CIDR list; static devices use a JSON array. LAN
+  discovery remains disabled unless explicitly enabled.
+
 ### Fixed
 
+- Stop automation timers and pending LAN/mDNS discovery on helper shutdown,
+  ignore stale asynchronous completions, and stop frontend retry timers.
+- Scope all module CSS to prevent style collisions with other modules.
 - Restored the charging-wattage prerequisite for outlet auto-off and ignored legacy armed records that could have been created from low-power readings alone
 - Reset outlet auto-off timers across telemetry failures and polling gaps, reject missing/invalid wattage instead of coercing it to zero, and require explicit outlet-on state for control
 - Logged wattage and policy details when auto-off timers start and outlets are switched off
@@ -21,8 +36,17 @@
 
 ### Changed
 
+- Extract Homebridge networking and accessory mapping into `lib/homebridge.js`,
+  consolidate discovery/authentication flows, and remove unused helpers.
+- Enable recommended environment-aware ESLint checks and lint/test CI on
+  Node.js 20, 22, and 24; expand lifecycle and rendering regression coverage.
 - Updated the development dependency tree to use `ansi-regex` 6.4.0 and
   `micromark-factory-space` 2.1.0
+
+### Security
+
+- Validate LAN packet shapes, bound discovery results and waiting routing IDs,
+  and share/rate-limit socket-triggered device fetches.
 
 ## [2.0.0] - 2026-10-04
 
