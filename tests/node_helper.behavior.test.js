@@ -24,6 +24,94 @@ Module._load = function (request, parent, isMain) {
 const helper = require("../node_helper");
 Module._load = originalLoad;
 
+test("both UDP listeners reject malformed JSON shapes without throwing", () => {
+  const dgram = require("node:dgram");
+  const originalCreate = dgram.createSocket;
+  const originalTimeout = global.setTimeout;
+  const sockets = [];
+  const timeouts = [];
+  let discovered;
+  dgram.createSocket = () => {
+    const socket = new EventEmitter();
+    socket.bind = () => {};
+    socket.close = () => {};
+    sockets.push(socket);
+    return socket;
+  };
+  global.setTimeout = (callback) => { timeouts.push(callback); return {}; };
+  try {
+    helper.discoverLanDevices(1000, [], (_error, devices) => { discovered = devices; });
+    helper.fetchLanDeviceStatuses([{ localIp: "192.0.2.10" }], 1000, () => {});
+    for (const socket of sockets) {
+      for (const payload of [null, [], 42, {}, { msg: { data: { device: { toString: null } } } }]) {
+        assert.doesNotThrow(() => socket.emit("message", Buffer.from(JSON.stringify(payload)), { address: "192.0.2.10" }));
+      }
+      assert.doesNotThrow(() => socket.emit("message", Buffer.from(JSON.stringify({
+        msg: { cmd: "devStatus", data: { capabilities: [null, 42] } }
+      })), { address: "192.0.2.10" }));
+    }
+    for (let index = 0; index < 130; index++) {
+      sockets[0].emit("message", Buffer.from(JSON.stringify({
+        msg: { cmd: "scan", data: { device: `device-${index}` } }
+      })), { address: "192.0.2.10" });
+    }
+    timeouts[0]();
+    assert.equal(discovered.length, 128);
+    const valid = helper.normalizeLanDevice({
+      msg: { cmd: "scan", data: { device: "device-1", ip: "192.0.2.10", on: true } }
+    }, { address: "192.0.2.10" });
+    assert.equal(valid.deviceId, "device-1");
+    assert.equal(valid.powerState, true);
+  } finally {
+    dgram.createSocket = originalCreate;
+    global.setTimeout = originalTimeout;
+  }
+});
+
+test("socket fetches validate values, coalesce work and bound pending routing IDs", () => {
+  const originalFetch = helper.fetchGoveeDevices;
+  const originalSend = helper.sendSocketNotification;
+  const sent = [];
+  let calls = 0;
+  let complete;
+  helper.rendererFetchState = null;
+  helper.sendSocketNotification = (notification, payload) => sent.push({ notification, payload });
+  helper.fetchGoveeDevices = (_options, callback) => { calls++; complete = callback; };
+  try {
+    for (const payload of [
+      [],
+      42,
+      { instanceId: { toString: null } },
+      { cloudDeviceListRefreshInterval: { valueOf: null, toString: null } }
+    ]) {
+      assert.doesNotThrow(() => helper.socketNotificationReceived("GOVEE_DEVICES_REQUEST", payload));
+      assert.equal(sent.at(-1).notification, "GOVEE_DEVICES_ERROR");
+    }
+    assert.equal(calls, 0);
+    for (let index = 0; index < 40; index++) {
+      helper.socketNotificationReceived("GOVEE_DEVICES_REQUEST", { instanceId: `instance-${index}` });
+    }
+    assert.equal(calls, 1);
+    assert.equal(helper.rendererFetchState.waiters.size, 32);
+    complete(null, [{ deviceId: "device-1" }]);
+    assert.equal(sent.filter((item) => item.notification === "GOVEE_DEVICES_DATA").length, 32);
+    helper.socketNotificationReceived("GOVEE_DEVICES_REQUEST", { instanceId: "cached" });
+    assert.equal(calls, 1);
+    assert.equal(sent.at(-1).payload.devices[0].deviceId, "device-1");
+    helper.rendererFetchState.completedAt = Date.now() - 30001;
+    helper.socketNotificationReceived("GOVEE_DEVICES_REQUEST", { instanceId: "refresh" });
+    assert.equal(calls, 2);
+    complete("Network unavailable");
+    helper.socketNotificationReceived("GOVEE_DEVICES_REQUEST", { instanceId: "retry" });
+    assert.equal(calls, 2);
+    assert.equal(sent.at(-1).payload.error, "Network unavailable");
+  } finally {
+    helper.fetchGoveeDevices = originalFetch;
+    helper.sendSocketNotification = originalSend;
+    helper.rendererFetchState = null;
+  }
+});
+
 const SERVER_ENV_NAMES = [
   "GOVEE_LAN_CONTROL_ENABLED",
   "GOVEE_LAN_ONLY",

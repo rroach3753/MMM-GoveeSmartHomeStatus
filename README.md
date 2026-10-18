@@ -240,6 +240,11 @@ with these names are ignored.
 
 ## Security
 
+Socket status requests are validated, share one in-flight fetch, and reuse
+its success or error for at least 30 seconds before another fetch can begin.
+At most 32 routing IDs may await a fetch. LAN discovery rejects malformed
+packet shapes and retains at most 128 discovered devices per scan.
+
 Secrets and privileged automation policy are server-only. Set them in the MagicMirror process environment; values placed in browser-side `config.js` or socket payloads are ignored. Renderer requests can request device status and Homebridge wattage enrichment, but cannot enable or retarget Homebridge writes or display control. `HOMEBRIDGE_URL` must be an HTTPS origin without a path, query, fragment, or embedded credentials. Plaintext HTTP origins are rejected so Homebridge credentials and bearer tokens cannot cross the network unencrypted.
 
 Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. A trusted self-signed local installation can explicitly set `HOMEBRIDGE_VERIFY_SSL=false`, but using a trusted private CA is strongly preferred because disabling verification permits interception of Homebridge credentials and access tokens.

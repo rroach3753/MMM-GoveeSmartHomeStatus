@@ -26,6 +26,7 @@ module.exports = NodeHelper.create({
   start: function () {
     console.log("MMM-GoveeSmartHomeStatus node_helper started");
     this.cloudCaches = new Map();
+    this.rendererFetchState = null;
     this.homebridgeTokenCache = new Map();
     this.homebridgeFallbackUrls = {};
     this.homebridgeAutoOffMonitors = {};
@@ -49,11 +50,55 @@ module.exports = NodeHelper.create({
 
   socketNotificationReceived: function (notification, payload) {
     if (notification === "GOVEE_DEVICES_REQUEST") {
-      this.fetchGoveeDevices(payload || {});
+      this.handleDevicesRequest(payload);
     }
   },
 
-  fetchGoveeDevices: function (requestOptions) {
+  handleDevicesRequest: function (payload) {
+    var self = this;
+    var options = payload == null ? {} : payload;
+    var instanceId = options.instanceId;
+    var intervals = [options.cloudDeviceListRefreshInterval, options.cloudDeviceStateRefreshInterval];
+    if (typeof options !== "object" || Array.isArray(options) ||
+        (instanceId != null && (typeof instanceId !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(instanceId))) ||
+        intervals.some(function (value) {
+          return value != null && ((typeof value !== "number" && typeof value !== "string") || !Number.isFinite(Number(value)));
+        })) {
+      this.sendDevicesError("Invalid device request.", typeof instanceId === "string" ? instanceId : null);
+      return;
+    }
+
+    if (!this.rendererFetchState) {
+      this.rendererFetchState = { pending: false, waiters: new Set(), completedAt: null, devices: [], error: null };
+    }
+    var state = this.rendererFetchState;
+    if (state.completedAt !== null && Date.now() - state.completedAt < 30000) {
+      if (state.error) this.sendDevicesError(state.error, instanceId);
+      else this.sendDevicesData(state.devices, instanceId);
+      return;
+    }
+    if (!state.waiters.has(instanceId) && state.waiters.size >= 32) {
+      this.sendDevicesError("Too many pending device requests.", instanceId);
+      return;
+    }
+    state.waiters.add(instanceId);
+    if (state.pending) return;
+    state.pending = true;
+    this.fetchGoveeDevices(options, function (error, devices) {
+      state.pending = false;
+      state.completedAt = Date.now();
+      state.error = error || null;
+      state.devices = devices || [];
+      var waiters = Array.from(state.waiters);
+      state.waiters.clear();
+      waiters.forEach(function (id) {
+        if (state.error) self.sendDevicesError(state.error, id);
+        else self.sendDevicesData(state.devices, id);
+      });
+    });
+  },
+
+  fetchGoveeDevices: function (requestOptions, callback) {
     var self = this;
     var instanceId = requestOptions.instanceId || null;
     var homebridgeConfig = this.resolveHomebridgeConfig();
@@ -67,30 +112,36 @@ module.exports = NodeHelper.create({
     var homebridgeVerifySSL = this.resolveHomebridgeVerifySSL();
     var hasHomebridge = !!(homebridgeUrl && homebridgeUsername);
 
+    function finish(error, devices) {
+      if (callback) callback(error, devices);
+      else if (error) self.sendDevicesError(error, instanceId);
+      else self.sendDevicesData(devices, instanceId);
+    }
+
     if (homebridgeConfig.error) {
-      this.sendDevicesError(homebridgeConfig.error, instanceId);
+      finish(homebridgeConfig.error);
       return;
     }
 
     if (lanConfig.error) {
-      this.sendDevicesError(lanConfig.error, instanceId);
+      finish(lanConfig.error);
       return;
     }
 
     function finalSend(devices) {
       if (!hasHomebridge) {
-        self.sendDevicesData(devices, instanceId);
+        finish(null, devices);
         return;
       }
       self.withHomebridgePower(homebridgeUrl, homebridgeUsername, homebridgePassword, homebridgeVerifySSL, devices, function (enrichedDevices) {
-        self.sendDevicesData(enrichedDevices, instanceId);
+        finish(null, enrichedDevices);
       }, homebridgeConfig.allowDiscovery);
     }
 
     function sendCloudData() {
       self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
         if (error) {
-          self.sendDevicesError(error.message, instanceId);
+          finish(error.message);
           return;
         }
 
@@ -107,7 +158,7 @@ module.exports = NodeHelper.create({
 
           if (lanConfig.only) {
             if ((lanError || lanStatusError) && !lanDevicesWithStatus.length) {
-              self.sendDevicesError("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"), instanceId);
+              finish("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"));
               return;
             }
 
@@ -116,13 +167,13 @@ module.exports = NodeHelper.create({
           }
 
           if (!apiKey) {
-            self.sendDevicesError("API key is required unless GOVEE_LAN_ONLY is enabled", instanceId);
+            finish("API key is required unless GOVEE_LAN_ONLY is enabled");
             return;
           }
 
           self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (cloudError, cloudDevices) {
             if (cloudError) {
-              self.sendDevicesError(cloudError.message, instanceId);
+              finish(cloudError.message);
               return;
             }
 
@@ -141,7 +192,7 @@ module.exports = NodeHelper.create({
     }
 
     if (!apiKey) {
-      self.sendDevicesError("API key is required", instanceId);
+      finish("API key is required");
       return;
     }
 
@@ -684,6 +735,9 @@ module.exports = NodeHelper.create({
       if (deviceMap[uniqueKey]) {
         return;
       }
+      if (discovered.length >= 128) {
+        return;
+      }
 
       deviceMap[uniqueKey] = true;
       discovered.push(lanDevice);
@@ -729,8 +783,20 @@ module.exports = NodeHelper.create({
   },
 
   normalizeLanDevice: function (lanPayload, rinfo) {
+    if (!lanPayload || typeof lanPayload !== "object" || Array.isArray(lanPayload) ||
+        !lanPayload.msg || typeof lanPayload.msg !== "object" || Array.isArray(lanPayload.msg) ||
+        !lanPayload.msg.data || typeof lanPayload.msg.data !== "object" || Array.isArray(lanPayload.msg.data)) {
+      console.warn("[MMM-GoveeSmartHomeStatus] Ignored malformed LAN packet.");
+      return null;
+    }
     var msg = lanPayload && lanPayload.msg ? lanPayload.msg : {};
     var data = msg && msg.data ? msg.data : {};
+    if ([msg.cmd, data.device, data.deviceId, lanPayload.device, data.sku, lanPayload.sku,
+      data.ip, data.localIp, lanPayload.ip, data.deviceName, data.name, lanPayload.deviceName]
+      .some(function (value) { return value != null && typeof value !== "string"; })) {
+      console.warn("[MMM-GoveeSmartHomeStatus] Ignored malformed LAN identity.");
+      return null;
+    }
     var cmd = msg && msg.cmd ? String(msg.cmd).toLowerCase() : "";
     var senderIp = rinfo && rinfo.address ? String(rinfo.address) : "";
     var deviceId = data.device || data.deviceId || lanPayload.device || "";
@@ -1365,7 +1431,8 @@ module.exports = NodeHelper.create({
 
     for (index = 0; index < instanceNames.length; index += 1) {
       capability = capabilities.find(function (item) {
-        return item.instance === instanceNames[index] && item.state;
+        return item && typeof item === "object" &&
+          item.instance === instanceNames[index] && item.state && typeof item.state === "object";
       });
 
       if (capability) {
