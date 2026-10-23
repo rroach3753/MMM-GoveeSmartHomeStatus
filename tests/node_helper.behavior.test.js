@@ -934,7 +934,7 @@ test("Homebridge power matches Govee device ID when display names differ", () =>
   }]);
 });
 
-test("Homebridge outlet state overrides stale Govee cloud power state", () => {
+test("explicit Homebridge outlet state overrides stale cloud state and wattage", () => {
   const accessories = [{
     accessoryInformation: { Name: "eBike - Pro" },
     serviceCharacteristics: [
@@ -965,7 +965,7 @@ test("Homebridge outlet state overrides stale Govee cloud power state", () => {
   assert.deepEqual(helper.applyHomebridgePower(devices, helper.buildHomebridgeStatusMap(accessories)), [{
     deviceId: "outlet-id",
     deviceName: "eBike - Pro",
-    powerState: true,
+    powerState: false,
     powerConsumption: 512.7,
     source: "homebridge"
   }]);
@@ -989,10 +989,12 @@ test("Homebridge enrichment preserves cloud fallback without usable outlet state
   }]);
 });
 
-test("Homebridge outlet state preserves on at zero watts", () => {
+test("explicit Homebridge outlet state takes precedence over wattage, with positive-wattage fallback", () => {
   assert.equal(helper.resolveHomebridgeOutletPowerState({ value: true }, 0), true);
   assert.equal(helper.resolveHomebridgeOutletPowerState({ value: false }, 0), false);
-  assert.equal(helper.resolveHomebridgeOutletPowerState({ value: false }, 500), true);
+  assert.equal(helper.resolveHomebridgeOutletPowerState({ value: false }, 500), false);
+  assert.equal(helper.resolveHomebridgeOutletPowerState(null, 500), true);
+  assert.equal(helper.resolveHomebridgeOutletPowerState(null, 0), undefined);
 });
 
 test("Homebridge power map retains zero watts and rejects invalid readings", () => {

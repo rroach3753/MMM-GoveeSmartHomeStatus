@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Prefer Homebridge's explicit outlet `On` state over positive cached wattage so a stale consumption reading cannot make an outlet appear on when Homebridge reports it off.
+
 ## [3.1.0] - 2026-10-23
 
 ### Added
