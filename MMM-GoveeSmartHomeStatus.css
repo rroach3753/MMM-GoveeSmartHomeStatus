@@ -315,6 +315,8 @@
 
 .mmm-govee-smartHome .compact-room-group {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .mmm-govee-smartHome .compact-room-header {
@@ -344,6 +346,34 @@
   grid-template-columns: repeat(3, minmax(76px, 1fr));
   gap: 5px;
   padding-top: 5px;
+  justify-content: center;
+  align-content: start;
+}
+
+.mmm-govee-smartHome .alignment-rows .compact-room-cards,
+.mmm-govee-smartHome .alignment-both .compact-room-cards {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.mmm-govee-smartHome .compact-room-row {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.mmm-govee-smartHome .compact-room-row .compact-card {
+  box-sizing: border-box;
+  flex: 0 0 calc((100% - 10px) / 3);
+  min-width: 0;
+}
+
+.mmm-govee-smartHome .alignment-vertical .compact-room-cards,
+.mmm-govee-smartHome .alignment-both .compact-room-cards {
+  flex: 1;
+  align-content: center;
+  justify-content: center;
 }
 
 .mmm-govee-smartHome .compact-card {
@@ -466,6 +496,18 @@
   grid-auto-columns: clamp(54px, 4vw, 80px);
   gap: 4px;
   padding-top: 2px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .alignment-vertical.single-card .compact-room-cards {
+  grid-template-rows: minmax(28px, auto);
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .compact-room-row {
+  gap: 4px;
+}
+
+.mmm-govee-smartHome.full-width-bottom-bar .compact-room-row .compact-card {
+  flex: 0 0 clamp(54px, 4vw, 80px);
 }
 
 .mmm-govee-smartHome.full-width-bottom-bar .compact-card-list.bottom-bar-compact {

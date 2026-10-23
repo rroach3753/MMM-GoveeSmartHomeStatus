@@ -499,6 +499,47 @@ test("grouped bottom bar fits room cards within the available width", () => {
   assert.match(roomRule[1], /grid-auto-columns: clamp\(54px, 4vw, 80px\);/);
 });
 
+test("grouped card alignment defaults to centered rows and supports all four modes", () => {
+  const { definition } = loadFrontendModule();
+  assert.equal(definition.defaults.compactRoomCardAlignment, "rows");
+  for (const alignment of ["rows", "block", "vertical", "both"]) {
+    for (const fullWidthBottomBar of [true, false]) {
+      for (const count of [1, 3, 5, 6]) {
+        const instance = {
+          ...definition,
+          config: { ...definition.defaults, compactRoomCardAlignment: alignment, fullWidthBottomBar }
+        };
+        const devices = Array.from({ length: count }, (_, i) => ({ deviceName: "Office - Device " + i, online: true }));
+        const group = instance.createCompactRoomGroup({ room: "Office", devices, on: 0, total: count });
+        assert.match(group.className, new RegExp("alignment-" + alignment));
+        const cards = group.children[1];
+        if (alignment === "rows" || alignment === "both") {
+          const columns = fullWidthBottomBar ? Math.ceil(count / 2) : 3;
+          assert.equal(cards.children.length, Math.ceil(count / columns));
+          assert.ok(cards.children.every(row => row.className === "compact-room-row"));
+          assert.equal(cards.children[0].children.length, Math.min(count, columns));
+          assert.deepEqual(
+            cards.children.flatMap(row => row.children.map(card => card.children[0].textContent)),
+            devices.map((_, i) => "Device " + i)
+          );
+          if (fullWidthBottomBar) assert.match(cards.style.width, /clamp\(54px, 4vw, 80px\)/);
+        } else {
+          assert.equal(cards.children.length, count);
+          assert.equal(cards.children[0].className, "compact-card");
+        }
+        if (count === 1) assert.match(group.className, /single-card/);
+      }
+    }
+  }
+});
+
+test("invalid grouped alignment warns and falls back to centered rows", () => {
+  const { definition } = loadFrontendModule();
+  const instance = { ...definition, config: { ...definition.defaults, compactRoomCardAlignment: "invalid" } };
+  const group = instance.createCompactRoomGroup({ room: "Office", devices: [], on: 0, total: 0 });
+  assert.match(group.className, /alignment-rows/);
+});
+
 test("compact cards group by configured room order with local device names", () => {
   const { definition } = loadFrontendModule();
   const moduleInstance = Object.assign({}, definition, {

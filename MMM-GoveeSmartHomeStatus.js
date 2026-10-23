@@ -19,6 +19,7 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     compactCards: false,
     maxCompactCards: 12,
     groupCompactCardsByRoom: true,
+    compactRoomCardAlignment: "rows",
     shortenGroupedDeviceNames: true,
     showCountsInRoomHeaders: true,
     hideRoomSummaryWhenGrouped: true,
@@ -390,8 +391,18 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     var header = document.createElement("div");
     var roomName = document.createElement("span");
     var cards = document.createElement("div");
+    var alignment = this.config.compactRoomCardAlignment;
+    if (!["rows", "block", "vertical", "both"].includes(alignment)) {
+      console.warn("[MMM-GoveeSmartHomeStatus] Invalid compactRoomCardAlignment; using rows:", alignment);
+      alignment = "rows";
+    }
+    var centeredRows = alignment === "rows" || alignment === "both";
+    var columns = this.config.fullWidthBottomBar ? Math.max(1, Math.ceil(group.devices.length / 2)) : 3;
 
-    roomGroup.className = "compact-room-group";
+    roomGroup.className = "compact-room-group alignment-" + alignment;
+    if (group.devices.length === 1) {
+      roomGroup.className += " single-card";
+    }
     header.className = "compact-room-header";
     roomName.className = "compact-room-name";
     roomName.textContent = group.room;
@@ -405,8 +416,17 @@ Module.register("MMM-GoveeSmartHomeStatus", {
     }
 
     cards.className = "compact-room-cards";
-    group.devices.forEach(function (device) {
-      cards.appendChild(this.createCompactCard(device, this.getGroupedDeviceName(device, group.room)));
+    if (centeredRows && this.config.fullWidthBottomBar) {
+      cards.style.width = "calc(" + columns + " * clamp(54px, 4vw, 80px) + " + (columns - 1) * 4 + "px)";
+    }
+    var row;
+    group.devices.forEach(function (device, index) {
+      if (centeredRows && index % columns === 0) {
+        row = document.createElement("div");
+        row.className = "compact-room-row";
+        cards.appendChild(row);
+      }
+      (centeredRows ? row : cards).appendChild(this.createCompactCard(device, this.getGroupedDeviceName(device, group.room)));
     }.bind(this));
 
     roomGroup.appendChild(header);

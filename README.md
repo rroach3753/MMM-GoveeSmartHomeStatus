@@ -213,6 +213,7 @@ auto-off, and presence-display variables.
 | `compactCards` | Boolean | Display devices as compact horizontal cards (scrollable) | `false` |
 | `maxCompactCards` | Number | Maximum number of devices to show in compact card view | `12` |
 | `groupCompactCardsByRoom` | Boolean | Organize compact cards into labeled room sections | `true` |
+| `compactRoomCardAlignment` | String | Grouped card alignment: `rows`, `block`, `vertical`, or `both` | `"rows"` |
 | `shortenGroupedDeviceNames` | Boolean | Remove an exact room prefix from card labels inside room sections | `true` |
 | `showCountsInRoomHeaders` | Boolean | Show each room's on/total count in its section heading | `true` |
 | `hideRoomSummaryWhenGrouped` | Boolean | Hide the redundant room summary when grouped compact cards are displayed | `true` |
@@ -432,6 +433,8 @@ When `maxCompactCards` is lower than the device count, selection rotates across 
 
 Set `groupCompactCardsByRoom: false` to restore the original flat compact-card grid. Set `hideRoomSummaryWhenGrouped: false` to display both room headings and the separate room summary.
 
+Grouped cards default to `compactRoomCardAlignment: "rows"`: cards fill across rows, with each row centered under its room heading, including incomplete rows. Choose `"block"` to preserve the previous grid arrangement (column-first in the bottom bar), `"vertical"` to preserve that arrangement and vertically center shorter groups, or `"both"` to center rows and vertically center shorter groups. This setting does not affect ungrouped cards. Bottom-bar groups still use at most two rows and retain the existing card widths.
+
 ### Homebridge Power Consumption (Outlet Wattage)
 
 Display the latest reported wattage on outlet device cards by connecting to the Homebridge REST API. Homebridge-Govee receives power data from the outlet via its AWS IoT channel and exposes it as a cached `CurrentConsumption` Eve characteristic. This module reads that value and the matching service's Homebridge `On` state on each refresh. The API does not provide a measurement timestamp, and reading it does not force a fresh device measurement; some models rely on pushed telemetry rather than periodic device polling. For display purposes, positive reported wattage is treated as evidence that the outlet is on. Outlets using Homebridge state display an `HB` source badge; if Homebridge is unavailable, unmatched, or lacks usable state, the existing Govee cloud or LAN-backed state remains in use.
@@ -489,6 +492,25 @@ This layout displays:
   - Gray border indicates powered OFF devices
   - Source badge shows `LAN+` (cloud+LAN merged), `LAN` (LAN-only), or `CLOUD` (cloud-only)
   - Perfect for side panels (bottom_right, top_right, etc.)
+
+### Room Card Alignment Options
+
+![Comparison of rows, block, vertical, and both room card alignment options](images/room_card_alignment.png)
+
+This illustrative comparison uses the module's grouped bottom-bar cards. Set `compactRoomCardAlignment` to one of these values:
+
+1. **`"rows"` (default)** — Fill cards left to right across each row and center every row beneath its room heading. Incomplete rows are centered too, while shorter groups remain top-aligned.
+2. **`"block"`** — Preserve the previous column-first bottom-bar arrangement, filling down each column before starting the next. Center the card block horizontally; incomplete rows are not centered separately, and shorter groups remain top-aligned.
+3. **`"vertical"`** — Preserve the same arrangement as `"block"`, but vertically center shorter card groups within the available space below their room headings. The single-card room makes this difference easiest to see.
+4. **`"both"`** — Combine the row-first ordering and individually centered rows of `"rows"` with vertical centering for shorter groups.
+
+For example, to select the fourth option:
+
+```javascript
+compactRoomCardAlignment: "both",
+```
+
+These options require `compactCards: true` and `groupCompactCardsByRoom: true`. Ungrouped cards are unchanged.
 
 ## Customizing Light Detection
 
