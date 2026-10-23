@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-23
+
 ### Added
 
 - Added `compactRoomCardAlignment` with centered rows as the default and selectable block, vertical, and combined alignment modes for grouped compact cards.
