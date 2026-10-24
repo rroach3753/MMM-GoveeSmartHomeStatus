@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.2.0] - 2026-10-24
+
+### Added
+
+- Added optional, server-configured monitor control using Homebridge-exposed Govee presence sensors.
+
 ## [Unreleased]
 
 ## [3.1.0] - 2026-10-23

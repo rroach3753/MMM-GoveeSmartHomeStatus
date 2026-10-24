@@ -26,6 +26,7 @@ A MagicMirror module for displaying Govee smart home device status and informati
 - Appliance hiding with configurable keyword filters (enabled by default)
 - Optional LAN Control discovery for local-network device visibility
 - **Homebridge power consumption integration** — display live wattage on outlet cards sourced from the Homebridge REST API
+- Optional monitor power control from Govee presence sensors exposed by Homebridge
 
 ## Requirements
 
@@ -189,7 +190,7 @@ If you do not see the API key option in-app, update the app to the latest versio
 
 Secrets and privileged automation settings must not be placed in
 `config/config.js`. See [Security](#security) for the server-only Homebridge,
-and outlet auto-off variables.
+display-control, and outlet auto-off variables.
 
 ## Configuration Options
 
@@ -224,6 +225,56 @@ and outlet auto-off variables.
 | `errorMessage` | String | Error message | `"Error fetching Govee device data."` |
 | `fullWidthBottomBar` | Boolean | Span full width of bottom_bar position | `false` |
 | `showPowerConsumption` | Boolean | Show live wattage sourced from Homebridge when available | `true` |
+
+### Optional presence-based monitor control
+
+This feature uses Govee occupancy or motion sensor characteristics exposed by
+the Homebridge UI API to control the MagicMirror host's display. It is disabled
+by default and configured only through the MagicMirror server environment; it
+does not accept sensor names or power-control commands from `config.js` or
+browser socket messages.
+
+- Any selected sensor reporting presence wakes the display on the next poll.
+- The display turns off after all selected sensors report clear continuously
+  for five minutes by default.
+- Missing, ambiguous, or unreadable sensors pause the off timer. Homebridge
+  request errors and long polling gaps reset it.
+- The feature reads actual display state and verifies power commands. It uses
+  Wayland `wlr-randr` or X11 DPMS through `xset`; unsupported environments
+  report an error rather than silently switching backends.
+- Stopping MagicMirror leaves the display in its current state. Keep SSH or
+  another manual recovery path available before enabling display automation.
+
+The selected sensor names must match exactly one Homebridge occupancy
+(`00000071`) or motion (`00000022`) characteristic. Names are case-insensitive
+and can match the accessory name or service name. If an accessory exposes
+multiple sensor services, use a unique service name. The Homebridge credentials
+and TLS settings are the same server-only settings used by the wattage feature.
+
+| Environment variable | Description | Default |
+| --- | --- | --- |
+| `PRESENCE_DISPLAY_ENABLED` | Explicitly enable monitor automation (`true`/`false`) | `false` |
+| `PRESENCE_DISPLAY_SENSOR_NAMES` | JSON array of 1-32 exact Homebridge sensor names | `[]` |
+| `PRESENCE_DISPLAY_OFF_DELAY_MS` | Continuous all-clear duration before turning off; minimum 1000 ms | `300000` |
+| `PRESENCE_DISPLAY_POLL_INTERVAL_MS` | Delay between completed Homebridge reads; minimum 1000 ms | `15000` |
+| `PRESENCE_DISPLAY_BACKEND` | Display backend: `auto`, `wayland`, or `x11` | `auto` |
+| `PRESENCE_DISPLAY_OUTPUT` | Wayland connector name; required for Wayland, ignored for X11 | None |
+
+Example for a Wayland-based mirror:
+
+```bash
+export PRESENCE_DISPLAY_ENABLED=true
+export PRESENCE_DISPLAY_SENSOR_NAMES='["Hallway - Sensor"]'
+export PRESENCE_DISPLAY_OFF_DELAY_MS=300000
+export PRESENCE_DISPLAY_POLL_INTERVAL_MS=15000
+export PRESENCE_DISPLAY_BACKEND=auto
+export PRESENCE_DISPLAY_OUTPUT=HDMI-A-1
+```
+
+Install `wlr-randr` for Wayland or `x11-xserver-utils` for X11 if the required
+display command is missing. For Wayland, find the connector name with
+`wlr-randr`. MagicMirror must run as the logged-in desktop user with its
+`WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR` or `DISPLAY` environment available.
 
 ### Server-only LAN policy
 
@@ -260,6 +311,12 @@ At most 32 routing IDs may await a fetch. LAN discovery rejects malformed
 packet shapes and retains at most 128 discovered devices per scan.
 
 Secrets and privileged automation policy are server-only. Set them in the MagicMirror process environment; values placed in browser-side `config.js` or socket payloads are ignored. Renderer requests can request device status and Homebridge wattage enrichment, but cannot enable or retarget Homebridge writes. `HOMEBRIDGE_URL` must be an HTTPS origin without a path, query, fragment, or embedded credentials. Plaintext HTTP origins are rejected so Homebridge credentials and bearer tokens cannot cross the network unencrypted.
+
+Presence-based display control is privileged physical-device automation. It
+remains disabled unless `PRESENCE_DISPLAY_ENABLED=true`; its sensor allowlist,
+timing, backend, and output are read only from the MagicMirror process
+environment. A malformed or incomplete enabled policy fails closed and logs
+an explicit error.
 
 Homebridge HTTPS certificate verification is enabled by default. For a private certificate authority, set `NODE_EXTRA_CA_CERTS` to its PEM certificate. A trusted self-signed local installation can explicitly set `HOMEBRIDGE_VERIFY_SSL=false`, but using a trusted private CA is strongly preferred because disabling verification permits interception of Homebridge credentials and access tokens.
 

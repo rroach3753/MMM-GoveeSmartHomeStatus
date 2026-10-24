@@ -5,6 +5,8 @@ const dgram = require("node:dgram");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { Display } = require("./lib/display");
+const { PresenceController, readSensors, resolvePresenceDisplayPolicy } = require("./lib/presence");
 
 const LAN_DISCOVERY_COMMANDS = ["scan", "scanreport", "devstatus"];
 const LAN_DISCOVERY_GROUP = "239.255.255.250";
@@ -31,6 +33,8 @@ module.exports = NodeHelper.create({
 
   stop: function () {
     this.stopped = true;
+    this.presenceDisplayController?.stop();
+    this.presenceDisplayController = null;
     Object.values(this.homebridgeAutoOffMonitors || {}).forEach(function (monitor) {
       clearTimeout(monitor.timer);
     });
@@ -415,9 +419,60 @@ module.exports = NodeHelper.create({
     var autoOffPolicy = this.resolveHomebridgeAutoOffPolicy(homebridgeConfig, verifySSL);
 
     this.configureHomebridgeAutoOff(SERVER_AUTO_OFF_MONITOR_ID, autoOffPolicy.config);
+    this.initializePresenceDisplay(homebridgeConfig, verifySSL);
 
     if (autoOffPolicy.error) {
       console.error("[MMM-GoveeSmartHomeStatus] Homebridge auto-off disabled:", autoOffPolicy.error);
+    }
+  },
+
+  initializePresenceDisplay: function (homebridgeConfig, verifySSL) {
+    var policy = resolvePresenceDisplayPolicy(process.env, homebridgeConfig, verifySSL);
+    var self = this;
+
+    if (policy.error) {
+      console.error("[MMM-GoveeSmartHomeStatus] Presence display disabled:", policy.error);
+      return;
+    }
+    if (!policy.config) return;
+
+    try {
+      var display = new Display(policy.config);
+      var client = {
+        read: function () {
+          return new Promise(function (resolve, reject) {
+            self.fetchHomebridgeMap(
+              policy.config.url,
+              policy.config.username,
+              policy.config.password,
+              policy.config.verifySSL,
+              function (error, readings) {
+                if (error) reject(error);
+                else resolve(readings);
+              },
+              false,
+              function (accessories) {
+                return readSensors(accessories, policy.config.sensors);
+              }
+            );
+          });
+        },
+        close: function () {}
+      };
+      this.presenceDisplayController = new PresenceController(
+        policy.config,
+        client,
+        display,
+        function (status) {
+          var log = status.level === "error" ? console.error : status.level === "warn" ? console.warn : console.log;
+          log("[MMM-GoveeSmartHomeStatus] Presence display: " + status.message);
+        }
+      );
+      console.log("[MMM-GoveeSmartHomeStatus] Starting " + display.backend +
+        " presence display control with " + policy.config.sensors.length + " sensor(s)");
+      this.presenceDisplayController.poll();
+    } catch (error) {
+      console.error("[MMM-GoveeSmartHomeStatus] Presence display disabled:", error.message);
     }
   },
 
