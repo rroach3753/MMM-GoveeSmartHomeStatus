@@ -2,7 +2,6 @@ const NodeHelper = require("node_helper");
 const homebridge = require("./lib/homebridge");
 const https = require("node:https");
 const dgram = require("node:dgram");
-const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -14,7 +13,6 @@ const LAN_DISCOVERY_LISTEN_PORT = 4002;
 const LAN_DEVICE_CONTROL_PORT = 4003;
 const LAN_DISCOVERY_MAX_UNICAST_TARGETS = 512;
 const SERVER_AUTO_OFF_MONITOR_ID = "__server_homebridge_auto_off";
-const SERVER_PRESENCE_MONITOR_ID = "__server_presence_display";
 
 module.exports = NodeHelper.create({
   ...homebridge,
@@ -28,19 +26,15 @@ module.exports = NodeHelper.create({
     this.homebridgeTokenCache = new Map();
     this.homebridgeFallbackUrls = {};
     this.homebridgeAutoOffMonitors = {};
-    this.presenceDisplayMonitors = {};
     this.initializeServerAutomations();
   },
 
   stop: function () {
     this.stopped = true;
-    for (const monitors of [this.homebridgeAutoOffMonitors, this.presenceDisplayMonitors]) {
-      Object.values(monitors || {}).forEach(function (monitor) {
-        clearTimeout(monitor.timer);
-      });
-    }
+    Object.values(this.homebridgeAutoOffMonitors || {}).forEach(function (monitor) {
+      clearTimeout(monitor.timer);
+    });
     this.homebridgeAutoOffMonitors = {};
-    this.presenceDisplayMonitors = {};
     this.rendererFetchState = null;
     for (const cleanup of this.pendingCleanups || []) cleanup();
     this.pendingCleanups = new Set();
@@ -415,68 +409,15 @@ module.exports = NodeHelper.create({
     };
   },
 
-  resolvePresenceDisplayPolicy: function (homebridgeConfig, verifySSL) {
-    var enabledSetting = this.resolveServerAutomationEnabled("PRESENCE_DISPLAY_CONTROL_ENABLED");
-    var sensorName;
-    var output;
-    var offDelay;
-    var pollInterval;
-    var error;
-
-    if (enabledSetting.error || !enabledSetting.enabled) {
-      return { config: null, error: enabledSetting.error };
-    }
-
-    if (homebridgeConfig.error || !homebridgeConfig.url || !homebridgeConfig.username) {
-      return {
-        config: null,
-        error: homebridgeConfig.error || "Homebridge server credentials are required when PRESENCE_DISPLAY_CONTROL_ENABLED=true."
-      };
-    }
-
-    sensorName = String(process.env.PRESENCE_DISPLAY_SENSOR_NAME || "").trim();
-    output = String(process.env.PRESENCE_DISPLAY_OUTPUT || "").trim();
-    offDelay = this.resolveRequiredAutomationNumber("PRESENCE_DISPLAY_OFF_DELAY_MS", 1000);
-    pollInterval = this.resolveRequiredAutomationNumber("PRESENCE_DISPLAY_POLL_INTERVAL_MS", 5000);
-    error = !sensorName ? "PRESENCE_DISPLAY_SENSOR_NAME is required when display control is enabled." :
-      !/^[A-Za-z0-9_.:-]+$/.test(output) ? "PRESENCE_DISPLAY_OUTPUT must be a non-empty Wayland output name containing only letters, numbers, dots, underscores, colons, or hyphens." :
-        offDelay.error || pollInterval.error;
-
-    if (error) {
-      return { config: null, error: error };
-    }
-
-    return {
-      config: {
-        url: homebridgeConfig.url,
-        username: homebridgeConfig.username,
-        password: homebridgeConfig.password,
-        verifySSL: verifySSL,
-        allowDiscovery: homebridgeConfig.allowDiscovery,
-        enabled: true,
-        sensorName: sensorName,
-        offDelay: offDelay.value,
-        pollInterval: pollInterval.value,
-        output: output
-      },
-      error: null
-    };
-  },
-
   initializeServerAutomations: function () {
     var homebridgeConfig = this.resolveHomebridgeConfig();
     var verifySSL = this.resolveHomebridgeVerifySSL();
     var autoOffPolicy = this.resolveHomebridgeAutoOffPolicy(homebridgeConfig, verifySSL);
-    var presencePolicy = this.resolvePresenceDisplayPolicy(homebridgeConfig, verifySSL);
 
     this.configureHomebridgeAutoOff(SERVER_AUTO_OFF_MONITOR_ID, autoOffPolicy.config);
-    this.configurePresenceDisplayMonitor(SERVER_PRESENCE_MONITOR_ID, presencePolicy.config);
 
     if (autoOffPolicy.error) {
       console.error("[MMM-GoveeSmartHomeStatus] Homebridge auto-off disabled:", autoOffPolicy.error);
-    }
-    if (presencePolicy.error) {
-      console.error("[MMM-GoveeSmartHomeStatus] Presence display control disabled:", presencePolicy.error);
     }
   },
 
@@ -1765,173 +1706,6 @@ module.exports = NodeHelper.create({
       }
       console.error("[MMM-GoveeSmartHomeStatus] Failed to persist auto-off state:", error.message);
     }
-  },
-
-  configurePresenceDisplayMonitor: function (instanceId, config) {
-    var self = this;
-    var monitorId = String(instanceId || "__default");
-    var existing;
-    var configKey;
-
-    if (!this.presenceDisplayMonitors) {
-      this.presenceDisplayMonitors = {};
-    }
-    existing = this.presenceDisplayMonitors[monitorId];
-
-    if (!config || !config.enabled || !config.sensorName || !/^[A-Za-z0-9_.:-]+$/.test(config.output)) {
-      if (existing && existing.timer) {
-        clearTimeout(existing.timer);
-      }
-      delete this.presenceDisplayMonitors[monitorId];
-      return;
-    }
-
-    configKey = [
-      config.url,
-      config.username,
-      config.password,
-      config.verifySSL,
-      config.sensorName.toLowerCase(),
-      config.offDelay,
-      config.pollInterval,
-      config.output
-    ].join("\n");
-
-    if (existing && existing.configKey === configKey) {
-      return;
-    }
-
-    if (existing && existing.timer) {
-      clearTimeout(existing.timer);
-    }
-
-    this.presenceDisplayMonitors[monitorId] = {
-      config: config,
-      configKey: configKey,
-      absentSince: null,
-      displayOn: null,
-      changingPower: false,
-      timer: null
-    };
-
-    this.presenceDisplayMonitors[monitorId].timer = setTimeout(function () {
-      self.pollPresenceDisplayMonitor(monitorId);
-    }, 1000);
-
-    if (this.presenceDisplayMonitors[monitorId].timer.unref) {
-      this.presenceDisplayMonitors[monitorId].timer.unref();
-    }
-  },
-
-  schedulePresenceDisplayPoll: function (monitorId) {
-    var self = this;
-    var monitor = this.presenceDisplayMonitors[monitorId];
-
-    if (!monitor) {
-      return;
-    }
-
-    monitor.timer = setTimeout(function () {
-      self.pollPresenceDisplayMonitor(monitorId);
-    }, monitor.config.pollInterval);
-
-    if (monitor.timer.unref) {
-      monitor.timer.unref();
-    }
-  },
-
-  pollPresenceDisplayMonitor: function (monitorId) {
-    var self = this;
-    var monitor = this.presenceDisplayMonitors[monitorId];
-
-    if (!monitor || monitor.changingPower) {
-      return;
-    }
-
-    monitor.timer = null;
-    this.fetchHomebridgeOccupancyMap(
-      monitor.config.url,
-      monitor.config.username,
-      monitor.config.password,
-      monitor.config.verifySSL,
-      function (error, occupancyMap) {
-        var currentMonitor = self.presenceDisplayMonitors[monitorId];
-        var occupied;
-        var action;
-
-        if (!currentMonitor || currentMonitor !== monitor) {
-          return;
-        }
-
-        if (error) {
-          console.error("[MMM-GoveeSmartHomeStatus] Presence display monitor error:", error.message);
-          self.schedulePresenceDisplayPoll(monitorId);
-          return;
-        }
-
-        occupied = occupancyMap[String(monitor.config.sensorName).toLowerCase()];
-        if (typeof occupied === "undefined") {
-          console.error("[MMM-GoveeSmartHomeStatus] Presence sensor not found:", monitor.config.sensorName);
-          self.schedulePresenceDisplayPoll(monitorId);
-          return;
-        }
-
-        action = self.processPresenceDisplayReading(monitor, occupied, Date.now());
-        if (!action) {
-          self.schedulePresenceDisplayPoll(monitorId);
-          return;
-        }
-
-        monitor.changingPower = true;
-        self.setDisplayPower(monitor.config.output, action === "on", function (powerError) {
-          if (self.presenceDisplayMonitors[monitorId] !== monitor) return;
-          monitor.changingPower = false;
-          if (powerError) {
-            console.error("[MMM-GoveeSmartHomeStatus] Failed to turn display " + action + ":", powerError.message);
-          } else {
-            monitor.displayOn = action === "on";
-            console.log("[MMM-GoveeSmartHomeStatus] Turned display " + action + " from " + monitor.config.sensorName + " occupancy");
-          }
-          self.schedulePresenceDisplayPoll(monitorId);
-        });
-      },
-      monitor.config.allowDiscovery
-    );
-  },
-
-  processPresenceDisplayReading: function (monitor, occupied, now) {
-    if (occupied) {
-      monitor.absentSince = null;
-      return monitor.displayOn === true ? null : "on";
-    }
-
-    if (monitor.absentSince === null) {
-      monitor.absentSince = now;
-      return null;
-    }
-
-    if (monitor.displayOn !== false && now - monitor.absentSince >= monitor.config.offDelay) {
-      return "off";
-    }
-
-    return null;
-  },
-
-  setDisplayPower: function (output, enabled, callback) {
-    var uid = typeof process.getuid === "function" ? process.getuid() : 1000;
-    var environment = Object.assign({}, process.env, {
-      XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || "/run/user/" + uid,
-      WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY || "wayland-0"
-    });
-
-    childProcess.execFile(
-      "/usr/bin/wlr-randr",
-      ["--output", output, enabled ? "--on" : "--off"],
-      { env: environment, timeout: 10000 },
-      function (error) {
-        callback(error || null);
-      }
-    );
   },
 
   generateRequestId: function () {

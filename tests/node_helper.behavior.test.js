@@ -50,7 +50,6 @@ test("stop clears monitors and ignores late renderer and automation completions"
     finishPower(null, {});
     assert.equal(sent.length, 0);
     assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), []);
-    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), []);
     assert.equal(helper.rendererFetchState, null);
     helper.start();
     finishFetch(null, [{ deviceId: "previous-lifecycle" }]);
@@ -73,14 +72,14 @@ test("Homebridge map entry points preserve mapping through the shared lookup flo
   helper.fetchHomebridgeAccessories = (_url, _token, _verify, callback, mapper) => callback(null, mapper([]));
   try {
     let callbacks = 0;
-    for (const method of ["fetchHomebridgePowerMap", "fetchHomebridgeOutletMap", "fetchHomebridgeOccupancyMap"]) {
+    for (const method of ["fetchHomebridgePowerMap", "fetchHomebridgeOutletMap"]) {
       helper[method]("https://trusted.example", "user", "password", true, (error, result) => {
         assert.equal(error, null);
         assert.deepEqual(result, {});
         callbacks++;
       }, false);
     }
-    assert.equal(callbacks, 3);
+    assert.equal(callbacks, 2);
   } finally {
     helper.withHomebridgeToken = originalToken;
     helper.fetchHomebridgeAccessories = originalAccessories;
@@ -245,12 +244,7 @@ const SERVER_ENV_NAMES = [
   "HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS",
   "HOMEBRIDGE_AUTO_OFF_ARM_WATTS",
   "HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS",
-  "HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS",
-  "PRESENCE_DISPLAY_CONTROL_ENABLED",
-  "PRESENCE_DISPLAY_SENSOR_NAME",
-  "PRESENCE_DISPLAY_OFF_DELAY_MS",
-  "PRESENCE_DISPLAY_POLL_INTERVAL_MS",
-  "PRESENCE_DISPLAY_OUTPUT"
+  "HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS"
 ];
 
 function replaceServerEnvironment(values) {
@@ -276,9 +270,7 @@ function replaceServerEnvironment(values) {
 
 function clearAutomationMonitors() {
   Object.values(helper.homebridgeAutoOffMonitors || {}).forEach((monitor) => clearTimeout(monitor.timer));
-  Object.values(helper.presenceDisplayMonitors || {}).forEach((monitor) => clearTimeout(monitor.timer));
   helper.homebridgeAutoOffMonitors = {};
-  helper.presenceDisplayMonitors = {};
 }
 
 function loadFrontendModule() {
@@ -403,11 +395,6 @@ test("frontend request omits all server-only secrets and automation policy", () 
       homebridgeAutoOffArmWatts: 1000,
       homebridgeAutoOffBelowDuration: 1,
       homebridgeAutoOffPollInterval: 1,
-      presenceDisplayControlEnabled: true,
-      presenceDisplaySensorName: "Attacker Sensor",
-      presenceDisplayOffDelay: 1,
-      presenceDisplayPollInterval: 1,
-      presenceDisplayOutput: "ATTACKER-1",
       enableLanControl: true,
       lanOnly: true,
       lanDiscoveryTimeout: 1000,
@@ -437,11 +424,6 @@ test("frontend request omits all server-only secrets and automation policy", () 
     "homebridgeAutoOffArmWatts",
     "homebridgeAutoOffBelowDuration",
     "homebridgeAutoOffPollInterval",
-    "presenceDisplayControlEnabled",
-    "presenceDisplaySensorName",
-    "presenceDisplayOffDelay",
-    "presenceDisplayPollInterval",
-    "presenceDisplayOutput",
     "enableLanControl",
     "lanOnly",
     "lanDiscoveryTimeout",
@@ -1266,37 +1248,6 @@ test("Homebridge auto-off preserves an armed charging cycle across restarts", ()
   }
 });
 
-test("Homebridge occupancy map reads presence sensor state", () => {
-  const accessories = [{
-    accessoryInformation: { Name: "Hallway - Sensor" },
-    serviceCharacteristics: [{
-      uuid: "00000071-0000-1000-8000-0026BB765291",
-      serviceName: "Hallway - Sensor",
-      value: 0
-    }]
-  }];
-
-  assert.deepEqual(helper.buildHomebridgeOccupancyMap(accessories), {
-    "hallway - sensor": false
-  });
-});
-
-test("presence display waits five minutes to turn off and wakes immediately", () => {
-  const monitor = {
-    config: { offDelay: 300000 },
-    absentSince: null,
-    displayOn: true
-  };
-
-  assert.equal(helper.processPresenceDisplayReading(monitor, false, 1000), null);
-  assert.equal(helper.processPresenceDisplayReading(monitor, false, 300999), null);
-  assert.equal(helper.processPresenceDisplayReading(monitor, false, 301000), "off");
-
-  monitor.displayOn = false;
-  assert.equal(helper.processPresenceDisplayReading(monitor, true, 302000), "on");
-  assert.equal(monitor.absentSince, null);
-});
-
 test("malicious renderer LAN settings cannot trigger internal network probes", () => {
   const restoreEnvironment = replaceServerEnvironment({});
   const previousApiKey = process.env.GOVEE_API_KEY;
@@ -1399,9 +1350,7 @@ test("malicious renderer automation settings cannot create privileged monitors",
   const originalWithPower = helper.withHomebridgePower;
   const originalSend = helper.sendDevicesData;
   const originalSetOutlet = helper.setHomebridgeOutletState;
-  const originalSetDisplay = helper.setDisplayPower;
   let outletWrites = 0;
-  let displayWrites = 0;
 
   process.env.GOVEE_API_KEY = "server-key";
   helper.fetchCloudDevicesSegmented = (apiKey, listInterval, stateInterval, callback) => callback(null, []);
@@ -1409,9 +1358,6 @@ test("malicious renderer automation settings cannot create privileged monitors",
   helper.sendDevicesData = () => {};
   helper.setHomebridgeOutletState = () => {
     outletWrites += 1;
-  };
-  helper.setDisplayPower = () => {
-    displayWrites += 1;
   };
 
   try {
@@ -1426,19 +1372,12 @@ test("malicious renderer automation settings cannot create privileged monitors",
         homebridgeAutoOffThresholdWatts: 1000,
         homebridgeAutoOffArmWatts: 1001,
         homebridgeAutoOffBelowDuration: 1,
-        homebridgeAutoOffPollInterval: 1,
-        presenceDisplayControlEnabled: true,
-        presenceDisplaySensorName: "Attacker Sensor",
-        presenceDisplayOffDelay: 1,
-        presenceDisplayPollInterval: 1,
-        presenceDisplayOutput: "ATTACKER-1"
+        homebridgeAutoOffPollInterval: 1
       });
     });
 
     assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), []);
-    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), []);
     assert.equal(outletWrites, 0);
-    assert.equal(displayWrites, 0);
   } finally {
     clearAutomationMonitors();
     restoreEnvironment();
@@ -1446,7 +1385,6 @@ test("malicious renderer automation settings cannot create privileged monitors",
     helper.withHomebridgePower = originalWithPower;
     helper.sendDevicesData = originalSend;
     helper.setHomebridgeOutletState = originalSetOutlet;
-    helper.setDisplayPower = originalSetDisplay;
     if (previousApiKey === undefined) {
       delete process.env.GOVEE_API_KEY;
     } else {
@@ -1465,12 +1403,7 @@ test("server automation policy is authoritative and uses singleton monitors", ()
     HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS: "4.5",
     HOMEBRIDGE_AUTO_OFF_ARM_WATTS: "22",
     HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS: "240000",
-    HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS: "45000",
-    PRESENCE_DISPLAY_CONTROL_ENABLED: "true",
-    PRESENCE_DISPLAY_SENSOR_NAME: "Authorized Sensor",
-    PRESENCE_DISPLAY_OFF_DELAY_MS: "180000",
-    PRESENCE_DISPLAY_POLL_INTERVAL_MS: "20000",
-    PRESENCE_DISPLAY_OUTPUT: "DP-1"
+    HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS: "45000"
   });
   const previousApiKey = process.env.GOVEE_API_KEY;
   const originalSendError = helper.sendDevicesError;
@@ -1489,17 +1422,11 @@ test("server automation policy is authoritative and uses singleton monitors", ()
         homebridgeAutoOffThresholdWatts: 999,
         homebridgeAutoOffArmWatts: 1000,
         homebridgeAutoOffBelowDuration: 1,
-        homebridgeAutoOffPollInterval: 1,
-        presenceDisplayControlEnabled: true,
-        presenceDisplaySensorName: "Retargeted Sensor",
-        presenceDisplayOffDelay: 1,
-        presenceDisplayPollInterval: 1,
-        presenceDisplayOutput: "RETARGETED-1"
+        homebridgeAutoOffPollInterval: 1
       });
     });
 
     assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), ["__server_homebridge_auto_off"]);
-    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), ["__server_presence_display"]);
     assert.deepEqual(
       {
         deviceName: helper.homebridgeAutoOffMonitors.__server_homebridge_auto_off.config.deviceName,
@@ -1516,24 +1443,8 @@ test("server automation policy is authoritative and uses singleton monitors", ()
         pollInterval: 45000
       }
     );
-    assert.deepEqual(
-      {
-        sensorName: helper.presenceDisplayMonitors.__server_presence_display.config.sensorName,
-        offDelay: helper.presenceDisplayMonitors.__server_presence_display.config.offDelay,
-        pollInterval: helper.presenceDisplayMonitors.__server_presence_display.config.pollInterval,
-        output: helper.presenceDisplayMonitors.__server_presence_display.config.output
-      },
-      {
-        sensorName: "Authorized Sensor",
-        offDelay: 180000,
-        pollInterval: 20000,
-        output: "DP-1"
-      }
-    );
-
     helper.initializeServerAutomations();
     assert.equal(Object.keys(helper.homebridgeAutoOffMonitors).length, 1);
-    assert.equal(Object.keys(helper.presenceDisplayMonitors).length, 1);
   } finally {
     clearAutomationMonitors();
     restoreEnvironment();
@@ -1556,12 +1467,7 @@ test("incomplete or invalid enabled server automation policy fails closed", () =
     HOMEBRIDGE_AUTO_OFF_THRESHOLD_WATTS: "5",
     HOMEBRIDGE_AUTO_OFF_ARM_WATTS: "4",
     HOMEBRIDGE_AUTO_OFF_BELOW_DURATION_MS: "300000",
-    HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS: "30000",
-    PRESENCE_DISPLAY_CONTROL_ENABLED: "true",
-    PRESENCE_DISPLAY_SENSOR_NAME: "Authorized Sensor",
-    PRESENCE_DISPLAY_OFF_DELAY_MS: "300000",
-    PRESENCE_DISPLAY_POLL_INTERVAL_MS: "15000",
-    PRESENCE_DISPLAY_OUTPUT: "../../unexpected"
+    HOMEBRIDGE_AUTO_OFF_POLL_INTERVAL_MS: "30000"
   });
   const originalConsoleError = console.error;
   const errors = [];
@@ -1573,9 +1479,7 @@ test("incomplete or invalid enabled server automation policy fails closed", () =
     helper.initializeServerAutomations();
 
     assert.deepEqual(Object.keys(helper.homebridgeAutoOffMonitors), []);
-    assert.deepEqual(Object.keys(helper.presenceDisplayMonitors), []);
     assert.ok(errors.some((message) => message.includes("ARM_WATTS")));
-    assert.ok(errors.some((message) => message.includes("PRESENCE_DISPLAY_OUTPUT")));
   } finally {
     console.error = originalConsoleError;
     clearAutomationMonitors();

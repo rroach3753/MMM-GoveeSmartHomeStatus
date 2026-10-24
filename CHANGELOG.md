@@ -68,7 +68,7 @@
 
 - Required HTTPS for Homebridge origins so credentials and bearer tokens cannot be transmitted over plaintext HTTP
 - Made `GOVEE_API_KEY`, `HOMEBRIDGE_URL`, `HOMEBRIDGE_USERNAME`, and `HOMEBRIDGE_PASSWORD` server-only environment settings; renderer-supplied secrets are ignored and no longer sent over the module socket
-- Moved Homebridge auto-off and presence/display enablement, targets, thresholds, timing, and display output to fail-closed server environment policy; renderer requests can no longer create or retarget privileged monitors
+- Moved Homebridge outlet auto-off enablement, targets, thresholds, and timing to fail-closed server environment policy; renderer requests can no longer create or retarget outlet automation
 
 ### Changed
 
