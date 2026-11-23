@@ -82,6 +82,7 @@ function controllerHarness() {
   let readings = [{ name: "sensor", value: false, error: null }];
   let on = true;
   let readError = null;
+  let statusReads = 0;
   const writes = [];
   const reports = [];
   const client = {
@@ -92,7 +93,10 @@ function controllerHarness() {
     close() {}
   };
   const display = {
-    isOn: async () => on,
+    isOn: async () => {
+      statusReads += 1;
+      return on;
+    },
     setPower: async (enabled) => {
       writes.push(enabled);
       on = enabled;
@@ -102,7 +106,7 @@ function controllerHarness() {
   const controller = new PresenceController({ offDelay: 300000, pollInterval: 15000 },
     client, display, (status) => reports.push(status), () => now);
   return {
-    controller, writes, reports,
+    controller, writes, reports, statusReads: () => statusReads,
     time(value) { now = value; },
     readings(value) { readings = value; },
     readError(value) { readError = value; },
@@ -118,6 +122,8 @@ test("display turns off only after continuous all-clear and wakes on any presenc
   const harness = controllerHarness();
   try {
     await harness.poll();
+    assert.equal(harness.statusReads(), 0);
+    assert.match(harness.reports.at(-1).message, /No display power change requested/);
     for (let time = 15000; time < 300000; time += 15000) {
       harness.time(time);
       await harness.poll();
@@ -128,6 +134,7 @@ test("display turns off only after continuous all-clear and wakes on any presenc
     harness.time(300000);
     await harness.poll();
     assert.deepEqual(harness.writes, [false]);
+    assert.equal(harness.statusReads(), 1);
     harness.readings([{ name: "sensor", value: true, error: null }]);
     harness.time(315000);
     await harness.poll();

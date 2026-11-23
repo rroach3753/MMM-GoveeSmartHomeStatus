@@ -104,6 +104,64 @@ test("late Homebridge authentication cannot refill caches after shutdown", () =>
   }
 });
 
+test("concurrent Homebridge token misses share one authentication request", () => {
+  const originalAuthenticate = helper.authenticateHomebridge;
+  let complete;
+  let authenticationCalls = 0;
+  const tokens = [];
+  helper.homebridgeTokenCache = new Map();
+  helper.homebridgeTokenRequests = new Map();
+  helper.authenticateHomebridge = (...args) => {
+    authenticationCalls += 1;
+    complete = args[4];
+  };
+  try {
+    helper.withHomebridgeToken("https://trusted.example", "user", "password", true,
+      (_error, token) => tokens.push(token));
+    helper.withHomebridgeToken("https://trusted.example", "user", "password", true,
+      (_error, token) => tokens.push(token));
+    assert.equal(authenticationCalls, 1);
+    complete(null, "shared-token", Date.now() + 60000);
+    assert.deepEqual(tokens, ["shared-token", "shared-token"]);
+    assert.equal(helper.homebridgeTokenRequests.size, 0);
+  } finally {
+    helper.authenticateHomebridge = originalAuthenticate;
+    helper.homebridgeTokenCache = new Map();
+    helper.homebridgeTokenRequests = new Map();
+  }
+});
+
+test("failed Homebridge authentication releases all waiters and permits retry", () => {
+  const originalAuthenticate = helper.authenticateHomebridge;
+  let complete;
+  let authenticationCalls = 0;
+  const errors = [];
+  helper.homebridgeTokenCache = new Map();
+  helper.homebridgeTokenRequests = new Map();
+  helper.authenticateHomebridge = (...args) => {
+    authenticationCalls += 1;
+    complete = args[4];
+  };
+  try {
+    for (let index = 0; index < 2; index++) {
+      helper.withHomebridgeToken("https://trusted.example", "user", "password", true,
+        (error) => errors.push(error));
+    }
+    const failure = new Error("authentication failed");
+    complete(failure);
+    assert.deepEqual(errors, [failure, failure]);
+    assert.equal(helper.homebridgeTokenRequests.size, 0);
+
+    helper.withHomebridgeToken("https://trusted.example", "user", "password", true, () => {});
+    assert.equal(authenticationCalls, 2);
+    complete(null, "retry-token", Date.now() + 60000);
+  } finally {
+    helper.authenticateHomebridge = originalAuthenticate;
+    helper.homebridgeTokenCache = new Map();
+    helper.homebridgeTokenRequests = new Map();
+  }
+});
+
 test("module styles do not define unscoped selectors", () => {
   const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
   for (const match of css.matchAll(/(?:^|[{},])\s*(\.[\w-][^{},]*)\s*(?=[{,])/g)) {
@@ -182,6 +240,103 @@ test("both UDP listeners reject malformed JSON shapes without throwing", () => {
   } finally {
     dgram.createSocket = originalCreate;
     global.setTimeout = originalTimeout;
+  }
+});
+
+test("LAN status probing finishes after every expected device responds", () => {
+  const dgram = require("node:dgram");
+  const originalCreate = dgram.createSocket;
+  const originalTimeout = global.setTimeout;
+  const originalClearTimeout = global.clearTimeout;
+  const timeoutCallbacks = [];
+  let socket;
+  let callbacks = 0;
+  let cleared = 0;
+  dgram.createSocket = () => {
+    socket = new EventEmitter();
+    socket.bind = (_port, callback) => callback();
+    socket.send = () => {};
+    socket.close = () => {};
+    return socket;
+  };
+  global.setTimeout = (callback) => { timeoutCallbacks.push(callback); return {}; };
+  global.clearTimeout = () => { cleared += 1; };
+  try {
+    helper.fetchLanDeviceStatuses([
+      { localIp: "192.0.2.10", deviceId: "one" },
+      { localIp: "192.0.2.11", deviceId: "two" }
+    ], 5000, (_error, results) => {
+      callbacks += 1;
+      assert.equal(results.length, 2);
+    });
+    for (const ip of ["192.0.2.10", "192.0.2.11"]) {
+      socket.emit("message", Buffer.from(JSON.stringify({
+        msg: { cmd: "devStatus", data: { capabilities: [{ type: "devices.capabilities.on_off", value: 1 }] } }
+      })), { address: ip });
+    }
+    assert.equal(callbacks, 1);
+    assert.equal(cleared, 1);
+    timeoutCallbacks[0]();
+    assert.equal(callbacks, 1);
+  } finally {
+    dgram.createSocket = originalCreate;
+    global.setTimeout = originalTimeout;
+    global.clearTimeout = originalClearTimeout;
+  }
+});
+
+test("cloud and LAN refreshes start concurrently before data is combined", () => {
+  const previousApiKey = process.env.GOVEE_API_KEY;
+  const originals = {
+    resolveLan: helper.resolveLanConfig,
+    resolveHomebridge: helper.resolveHomebridgeConfig,
+    resolveVerify: helper.resolveHomebridgeVerifySSL,
+    discover: helper.discoverLanDevices,
+    statuses: helper.fetchLanDeviceStatuses,
+    cloud: helper.fetchCloudDevicesSegmented,
+    merge: helper.mergeLanIntoCloud
+  };
+  const started = [];
+  let finishCloud;
+  let finishDiscovery;
+  let completed = 0;
+  process.env.GOVEE_API_KEY = "test-key";
+  helper.resolveLanConfig = () => ({
+    enabled: true, only: false, timeout: 1000,
+    discoveryTargets: ["192.0.2.10"], staticDevices: []
+  });
+  helper.resolveHomebridgeConfig = () => ({ url: "", username: "", password: "", error: null });
+  helper.resolveHomebridgeVerifySSL = () => true;
+  helper.discoverLanDevices = (_timeout, _targets, callback) => {
+    started.push("lan");
+    finishDiscovery = callback;
+  };
+  helper.fetchLanDeviceStatuses = (devices, _timeout, callback) => callback(null, devices);
+  helper.fetchCloudDevicesSegmented = (_key, _listInterval, _stateInterval, callback) => {
+    started.push("cloud");
+    finishCloud = callback;
+  };
+  helper.mergeLanIntoCloud = (cloud, lan) => [...cloud, ...lan];
+  try {
+    helper.fetchGoveeDevices({}, (_error, devices) => {
+      completed += 1;
+      assert.equal(devices.length, 2);
+    });
+    assert.deepEqual(started, ["cloud", "lan"]);
+    finishDiscovery(null, [{ localIp: "192.0.2.10" }]);
+    assert.equal(completed, 0);
+    finishCloud(null, [{ deviceId: "cloud" }]);
+    assert.equal(completed, 1);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.GOVEE_API_KEY;
+    else process.env.GOVEE_API_KEY = previousApiKey;
+    helper.resolveLanConfig = originals.resolveLan;
+    helper.resolveHomebridgeConfig = originals.resolveHomebridge;
+    helper.resolveHomebridgeVerifySSL = originals.resolveVerify;
+    helper.discoverLanDevices = originals.discover;
+    helper.fetchLanDeviceStatuses = originals.statuses;
+    helper.fetchCloudDevicesSegmented = originals.cloud;
+    helper.mergeLanIntoCloud = originals.merge;
   }
 });
 
@@ -546,11 +701,27 @@ test("compact cards group by configured room order with local device names", () 
   assert.equal(moduleInstance.getGroupedDeviceName(devices[2], "Unassigned"), "Hallway");
 });
 
+test("compact room groups preserve numeric order and prototype-like room names", () => {
+  const { definition } = loadFrontendModule();
+  const moduleInstance = Object.assign({}, definition, {
+    config: Object.assign({}, definition.defaults, {
+      roomOrder: ["__proto__", "2", "10"]
+    })
+  });
+  const groups = moduleInstance.buildCompactRoomGroups([
+    { roomName: "10", deviceName: "Ten" },
+    { roomName: "2", deviceName: "Two" },
+    { roomName: "__proto__", deviceName: "Prototype" }
+  ]);
+  assert.deepEqual(Array.from(groups, (group) => group.room), ["__proto__", "2", "10"]);
+});
+
 test("compact-card limits retain representation from each room", () => {
   const { definition } = loadFrontendModule();
   const moduleInstance = Object.assign({}, definition, {
     config: Object.assign({}, definition.defaults, {
-      groupCompactCardsByRoom: true
+      groupCompactCardsByRoom: true,
+      maxCompactCards: 3
     })
   });
   const devices = [
@@ -562,9 +733,34 @@ test("compact-card limits retain representation from each room", () => {
     { deviceName: "Office - Right" }
   ];
 
-  const selected = moduleInstance.selectCompactCardDevices(devices, 3);
+  const rendered = moduleInstance.createCompactCardList(devices);
 
-  assert.deepEqual(Array.from(selected, (device) => moduleInstance.inferRoomName(device)), ["Bedroom", "Kitchen", "Office"]);
+  assert.deepEqual(
+    Array.from(rendered.children, (group) => group.children[0].children[0].textContent),
+    ["Bedroom", "Kitchen", "Office"]
+  );
+});
+
+test("grouped compact rendering sorts devices once per render", () => {
+  const { definition } = loadFrontendModule();
+  const moduleInstance = Object.assign({}, definition, {
+    config: Object.assign({}, definition.defaults, {
+      groupCompactCardsByRoom: true,
+      maxCompactCards: 2
+    })
+  });
+  const originalSort = moduleInstance.sortDevicesForCards;
+  let sorts = 0;
+  moduleInstance.sortDevicesForCards = function (devices) {
+    sorts += 1;
+    return originalSort.call(this, devices);
+  };
+
+  moduleInstance.createCompactCardList([
+    { deviceName: "Bedroom - Left" },
+    { deviceName: "Office - Left" }
+  ]);
+  assert.equal(sorts, 1);
 });
 
 test("Homebridge accessory API explains the insecure mode requirement", () => {
@@ -1621,6 +1817,37 @@ test("Govee cloud caches remain isolated when different API key requests race", 
       apiKey: "key-b",
       powerState: true
     }]);
+  } finally {
+    helper.fetchCloudDeviceList = originalFetchList;
+    helper.fetchDeviceStates = originalFetchStates;
+    helper.cloudCaches = new Map();
+  }
+});
+
+test("successful empty Govee cloud results remain cached for their interval", () => {
+  const originalFetchList = helper.fetchCloudDeviceList;
+  const originalFetchStates = helper.fetchDeviceStates;
+  let listCalls = 0;
+  let stateCalls = 0;
+  helper.cloudCaches = new Map();
+  helper.fetchCloudDeviceList = (_apiKey, callback) => {
+    listCalls += 1;
+    callback(null, []);
+  };
+  helper.fetchDeviceStates = (_apiKey, devices, callback) => {
+    stateCalls += 1;
+    assert.deepEqual(devices, []);
+    callback([]);
+  };
+  try {
+    helper.fetchCloudDevicesSegmented("empty-key", 60000, 60000, (_error, devices) => {
+      assert.deepEqual(devices, []);
+    });
+    helper.fetchCloudDevicesSegmented("empty-key", 60000, 60000, (_error, devices) => {
+      assert.deepEqual(devices, []);
+    });
+    assert.equal(listCalls, 1);
+    assert.equal(stateCalls, 1);
   } finally {
     helper.fetchCloudDeviceList = originalFetchList;
     helper.fetchDeviceStates = originalFetchStates;

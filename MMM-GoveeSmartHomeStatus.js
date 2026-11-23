@@ -305,27 +305,19 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   createCompactCardList: function (devices) {
     var maxCards = Number(this.config.maxCompactCards) || 12;
-    var devicesToShow = this.selectCompactCardDevices(devices, maxCards);
-
     var wrapper = document.createElement("div");
     wrapper.className = "compact-card-list";
 
     if (this.config.groupCompactCardsByRoom) {
       var allRoomGroups = this.buildCompactRoomGroups(devices);
       wrapper.classList.add("grouped-by-room");
-      this.buildCompactRoomGroups(devicesToShow).forEach(function (group) {
-        var fullGroup = allRoomGroups.find(function (candidate) {
-          return candidate.room === group.room;
-        });
-        if (fullGroup) {
-          group.on = fullGroup.on;
-          group.total = fullGroup.total;
-        }
+      this.selectCompactRoomGroups(allRoomGroups, maxCards).forEach(function (group) {
         wrapper.appendChild(this.createCompactRoomGroup(group));
       }.bind(this));
       return wrapper;
     }
 
+    var devicesToShow = this.selectCompactCardDevices(devices, maxCards);
     if (this.config.fullWidthBottomBar) {
       wrapper.classList.add("bottom-bar-compact");
 
@@ -447,62 +439,72 @@ Module.register("MMM-GoveeSmartHomeStatus", {
   },
 
   buildCompactRoomGroups: function (devices) {
-    var groups = {};
+    var groups = new Map();
 
     this.sortDevicesForCards(devices).forEach(function (device) {
       var room = this.inferRoomName(device);
-      if (!groups[room]) {
-        groups[room] = { room: room, devices: [], on: 0, total: 0 };
+      if (!groups.has(room)) {
+        groups.set(room, { room: room, devices: [], on: 0, total: 0 });
       }
 
-      groups[room].devices.push(device);
-      groups[room].total += 1;
+      var group = groups.get(room);
+      group.devices.push(device);
+      group.total += 1;
       if (device.powerState === true) {
-        groups[room].on += 1;
+        group.on += 1;
       }
     }.bind(this));
 
-    return Object.keys(groups).map(function (room) {
-      return groups[room];
-    }).sort(function (left, right) {
-      return this.compareRoomNames(left.room, right.room);
-    }.bind(this));
+    return Array.from(groups.values());
   },
 
   selectCompactCardDevices: function (devices, maxCards) {
-    var sortedDevices = this.sortDevicesForCards(devices);
     var limit = Math.max(1, maxCards);
+    return this.sortDevicesForCards(devices).slice(0, limit);
+  },
 
-    if (!this.config.groupCompactCardsByRoom || sortedDevices.length <= limit) {
-      return sortedDevices.slice(0, limit);
-    }
-
-    var groups = this.buildCompactRoomGroups(sortedDevices);
+  selectCompactRoomGroups: function (groups, maxCards) {
     var selected = [];
+    var limit = Math.max(1, maxCards);
     var deviceIndex = 0;
     var addedDevice = true;
+    var selectedGroups = new Map();
 
     while (selected.length < limit && addedDevice) {
       addedDevice = false;
       groups.forEach(function (group) {
         if (selected.length < limit && group.devices[deviceIndex]) {
           selected.push(group.devices[deviceIndex]);
+          var selectedGroup = selectedGroups.get(group.room);
+          if (!selectedGroup) {
+            selectedGroup = {
+              room: group.room, devices: [], on: group.on, total: group.total
+            };
+            selectedGroups.set(group.room, selectedGroup);
+          }
+          selectedGroup.devices.push(group.devices[deviceIndex]);
           addedDevice = true;
         }
       });
       deviceIndex += 1;
     }
 
-    return selected;
+    return Array.from(selectedGroups.values());
   },
 
-  compareRoomNames: function (leftRoom, rightRoom) {
-    var roomOrder = Array.isArray(this.config.roomOrder) ? this.config.roomOrder : [];
-    var normalizedOrder = roomOrder.map(function (room) {
-      return String(room).toLowerCase();
+  getRoomRanks: function () {
+    var ranks = new Map();
+    (Array.isArray(this.config.roomOrder) ? this.config.roomOrder : []).forEach(function (room, index) {
+      var normalized = String(room).toLowerCase();
+      if (!ranks.has(normalized)) ranks.set(normalized, index);
     });
-    var leftIndex = normalizedOrder.indexOf(String(leftRoom).toLowerCase());
-    var rightIndex = normalizedOrder.indexOf(String(rightRoom).toLowerCase());
+    return ranks;
+  },
+
+  compareRoomNames: function (leftRoom, rightRoom, roomRanks) {
+    var ranks = roomRanks || this.getRoomRanks();
+    var leftIndex = ranks.has(String(leftRoom).toLowerCase()) ? ranks.get(String(leftRoom).toLowerCase()) : -1;
+    var rightIndex = ranks.has(String(rightRoom).toLowerCase()) ? ranks.get(String(rightRoom).toLowerCase()) : -1;
 
     if (leftRoom === "Unassigned" || rightRoom === "Unassigned") {
       return leftRoom === rightRoom ? 0 : (leftRoom === "Unassigned" ? 1 : -1);
@@ -523,10 +525,13 @@ Module.register("MMM-GoveeSmartHomeStatus", {
 
   sortDevicesForCards: function (devices) {
     var self = this;
+    var roomRanks = this.getRoomRanks();
 
-    return (Array.isArray(devices) ? devices.slice() : []).sort(function (left, right) {
-      var leftRoom = self.inferRoomName(left);
-      var rightRoom = self.inferRoomName(right);
+    return (Array.isArray(devices) ? devices : []).map(function (device) {
+      return { device: device, room: self.inferRoomName(device) };
+    }).sort(function (leftEntry, rightEntry) {
+      var leftRoom = leftEntry.room;
+      var rightRoom = rightEntry.room;
       var leftUnassigned = leftRoom === "Unassigned";
       var rightUnassigned = rightRoom === "Unassigned";
       var roomCompare;
@@ -536,12 +541,15 @@ Module.register("MMM-GoveeSmartHomeStatus", {
         return leftUnassigned ? 1 : -1;
       }
 
-      roomCompare = self.compareRoomNames(leftRoom, rightRoom);
+      roomCompare = self.compareRoomNames(leftRoom, rightRoom, roomRanks);
       if (roomCompare !== 0) {
         return roomCompare;
       }
 
-      return String((left && left.deviceName) || "").localeCompare(String((right && right.deviceName) || ""), undefined, { sensitivity: "base" });
+      return String((leftEntry.device && leftEntry.device.deviceName) || "")
+        .localeCompare(String((rightEntry.device && rightEntry.device.deviceName) || ""), undefined, { sensitivity: "base" });
+    }).map(function (entry) {
+      return entry.device;
     });
   },
 

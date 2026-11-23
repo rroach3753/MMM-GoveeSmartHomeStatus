@@ -26,6 +26,7 @@ module.exports = NodeHelper.create({
     this.cloudCaches = new Map();
     this.rendererFetchState = null;
     this.homebridgeTokenCache = new Map();
+    this.homebridgeTokenRequests = new Map();
     this.homebridgeFallbackUrls = {};
     this.homebridgeAutoOffMonitors = {};
     this.initializeServerAutomations();
@@ -44,6 +45,7 @@ module.exports = NodeHelper.create({
     this.pendingCleanups = new Set();
     this.cloudCaches = new Map();
     this.homebridgeTokenCache = new Map();
+    this.homebridgeTokenRequests = new Map();
     this.homebridgeFallbackUrls = {};
   },
 
@@ -158,56 +160,66 @@ module.exports = NodeHelper.create({
       }, homebridgeConfig.allowDiscovery);
     }
 
-    function sendCloudData() {
-      self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
-        if (error) {
-          finish(error.message);
-          return;
-        }
+    function fetchLanData(done) {
+      self.discoverLanDevices(lanConfig.timeout, lanConfig.discoveryTargets, function (lanError, lanDevices) {
+        var combinedLanDevices = self.addStaticLanDevices(lanDevices, lanConfig.staticDevices);
 
-        finalSend(devices);
+        self.fetchLanDeviceStatuses(combinedLanDevices, lanConfig.timeout, function (lanStatusError, statusLanDevices) {
+          done(lanError, lanStatusError, statusLanDevices);
+        });
       });
     }
 
     if (lanConfig.enabled) {
-      this.discoverLanDevices(lanConfig.timeout, lanConfig.discoveryTargets, function (lanError, lanDevices) {
-        var combinedLanDevices = self.addStaticLanDevices(lanDevices, lanConfig.staticDevices);
-
-        self.fetchLanDeviceStatuses(combinedLanDevices, lanConfig.timeout, function (lanStatusError, statusLanDevices) {
-          var lanDevicesWithStatus = statusLanDevices;
-
-          if (lanConfig.only) {
-            if ((lanError || lanStatusError) && !lanDevicesWithStatus.length) {
-              finish("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"));
-              return;
-            }
-
-            finalSend(lanDevicesWithStatus);
+      if (lanConfig.only) {
+        fetchLanData(function (lanError, lanStatusError, lanDevices) {
+          if ((lanError || lanStatusError) && !lanDevices.length) {
+            finish("LAN discovery failed: " + ((lanError || lanStatusError).message || "Unknown error"));
             return;
           }
 
-          if (!apiKey) {
-            finish("API key is required unless GOVEE_LAN_ONLY is enabled");
-            return;
-          }
-
-          self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (cloudError, cloudDevices) {
-            if (cloudError) {
-              finish(cloudError.message);
-              return;
-            }
-
-            // If LAN discovery fails and there is no static fallback, keep cloud behavior unchanged.
-            if (lanError && !lanDevicesWithStatus.length) {
-              finalSend(cloudDevices);
-              return;
-            }
-
-            finalSend(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus));
-          });
+          finalSend(lanDevices);
         });
-      });
+        return;
+      }
 
+      if (!apiKey) {
+        finish("API key is required unless GOVEE_LAN_ONLY is enabled");
+        return;
+      }
+
+      var cloudComplete = false;
+      var lanComplete = false;
+      var cloudError = null;
+      var cloudDevices = [];
+      var lanError = null;
+      var lanDevicesWithStatus = [];
+
+      function finishCombined() {
+        if (!cloudComplete || !lanComplete) return;
+        if (cloudError) {
+          finish(cloudError.message);
+          return;
+        }
+        if (lanError && !lanDevicesWithStatus.length) {
+          finalSend(cloudDevices);
+          return;
+        }
+        finalSend(self.mergeLanIntoCloud(cloudDevices, lanDevicesWithStatus));
+      }
+
+      self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
+        cloudError = error;
+        cloudDevices = devices || [];
+        cloudComplete = true;
+        finishCombined();
+      });
+      fetchLanData(function (error, _statusError, devices) {
+        lanError = error;
+        lanDevicesWithStatus = devices || [];
+        lanComplete = true;
+        finishCombined();
+      });
       return;
     }
 
@@ -216,7 +228,13 @@ module.exports = NodeHelper.create({
       return;
     }
 
-    sendCloudData();
+    self.fetchCloudDevicesSegmented(apiKey, cloudDeviceListRefreshInterval, cloudDeviceStateRefreshInterval, function (error, devices) {
+      if (error) {
+        finish(error.message);
+        return;
+      }
+      finalSend(devices);
+    });
   },
 
   resolveLanConfig: function () {
@@ -514,8 +532,8 @@ module.exports = NodeHelper.create({
     var cache = this.getCloudCache(apiKey);
     var listInterval = this.normalizeRefreshInterval(listIntervalMs);
     var stateInterval = this.normalizeRefreshInterval(stateIntervalMs);
-    var hasCachedList = cache.devices.length > 0;
-    var hasCachedEnriched = cache.enrichedDevices.length > 0;
+    var hasCachedList = cache.lastListFetchAt > 0;
+    var hasCachedEnriched = cache.lastStateFetchAt > 0;
     var shouldFetchList = !hasCachedList || listInterval === 0 || !cache.lastListFetchAt || (now - cache.lastListFetchAt >= listInterval);
     var shouldFetchState = !hasCachedEnriched || stateInterval === 0 || !cache.lastStateFetchAt || (now - cache.lastStateFetchAt >= stateInterval);
 
@@ -866,6 +884,7 @@ module.exports = NodeHelper.create({
     var timeout = Math.max(1000, Number(timeoutMs) || 4000);
     var results = new Array(devices.length);
     var resultReceivedMap = {};
+    var receivedCount = 0;
     var sharedSocket = null;
     var isFinished = false;
     var timeoutTimer;
@@ -949,6 +968,7 @@ module.exports = NodeHelper.create({
 
         // This is a match for this device
         resultReceivedMap[index] = true;
+        receivedCount += 1;
 
         // devStatus replies often omit device ID; preserve discovered ID for cloud merge/LAN+ labeling.
         statusDevice.deviceId = responseDeviceIdRaw || device.deviceId || statusDevice.deviceId;
@@ -968,6 +988,9 @@ module.exports = NodeHelper.create({
 
         results[index] = statusDevice;
       });
+      if (receivedCount === devices.length) {
+        finish();
+      }
     });
 
     sharedSocket.bind(LAN_DISCOVERY_LISTEN_PORT, function () {
