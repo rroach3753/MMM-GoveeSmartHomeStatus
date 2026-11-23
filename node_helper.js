@@ -26,7 +26,6 @@ module.exports = NodeHelper.create({
     this.cloudCaches = new Map();
     this.rendererFetchState = null;
     this.homebridgeTokenCache = new Map();
-    this.homebridgeTokenRequests = new Map();
     this.homebridgeFallbackUrls = {};
     this.homebridgeAutoOffMonitors = {};
     this.initializeServerAutomations();
@@ -45,7 +44,6 @@ module.exports = NodeHelper.create({
     this.pendingCleanups = new Set();
     this.cloudCaches = new Map();
     this.homebridgeTokenCache = new Map();
-    this.homebridgeTokenRequests = new Map();
     this.homebridgeFallbackUrls = {};
   },
 

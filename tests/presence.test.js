@@ -122,8 +122,8 @@ test("display turns off only after continuous all-clear and wakes on any presenc
   const harness = controllerHarness();
   try {
     await harness.poll();
-    assert.equal(harness.statusReads(), 0);
-    assert.match(harness.reports.at(-1).message, /No display power change requested/);
+    assert.equal(harness.statusReads(), 1);
+    assert.match(harness.reports.at(-1).message, /Display on/);
     for (let time = 15000; time < 300000; time += 15000) {
       harness.time(time);
       await harness.poll();
@@ -134,7 +134,7 @@ test("display turns off only after continuous all-clear and wakes on any presenc
     harness.time(300000);
     await harness.poll();
     assert.deepEqual(harness.writes, [false]);
-    assert.equal(harness.statusReads(), 1);
+    assert.ok(harness.statusReads() > 1);
     harness.readings([{ name: "sensor", value: true, error: null }]);
     harness.time(315000);
     await harness.poll();

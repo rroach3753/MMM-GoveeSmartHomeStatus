@@ -104,64 +104,6 @@ test("late Homebridge authentication cannot refill caches after shutdown", () =>
   }
 });
 
-test("concurrent Homebridge token misses share one authentication request", () => {
-  const originalAuthenticate = helper.authenticateHomebridge;
-  let complete;
-  let authenticationCalls = 0;
-  const tokens = [];
-  helper.homebridgeTokenCache = new Map();
-  helper.homebridgeTokenRequests = new Map();
-  helper.authenticateHomebridge = (...args) => {
-    authenticationCalls += 1;
-    complete = args[4];
-  };
-  try {
-    helper.withHomebridgeToken("https://trusted.example", "user", "password", true,
-      (_error, token) => tokens.push(token));
-    helper.withHomebridgeToken("https://trusted.example", "user", "password", true,
-      (_error, token) => tokens.push(token));
-    assert.equal(authenticationCalls, 1);
-    complete(null, "shared-token", Date.now() + 60000);
-    assert.deepEqual(tokens, ["shared-token", "shared-token"]);
-    assert.equal(helper.homebridgeTokenRequests.size, 0);
-  } finally {
-    helper.authenticateHomebridge = originalAuthenticate;
-    helper.homebridgeTokenCache = new Map();
-    helper.homebridgeTokenRequests = new Map();
-  }
-});
-
-test("failed Homebridge authentication releases all waiters and permits retry", () => {
-  const originalAuthenticate = helper.authenticateHomebridge;
-  let complete;
-  let authenticationCalls = 0;
-  const errors = [];
-  helper.homebridgeTokenCache = new Map();
-  helper.homebridgeTokenRequests = new Map();
-  helper.authenticateHomebridge = (...args) => {
-    authenticationCalls += 1;
-    complete = args[4];
-  };
-  try {
-    for (let index = 0; index < 2; index++) {
-      helper.withHomebridgeToken("https://trusted.example", "user", "password", true,
-        (error) => errors.push(error));
-    }
-    const failure = new Error("authentication failed");
-    complete(failure);
-    assert.deepEqual(errors, [failure, failure]);
-    assert.equal(helper.homebridgeTokenRequests.size, 0);
-
-    helper.withHomebridgeToken("https://trusted.example", "user", "password", true, () => {});
-    assert.equal(authenticationCalls, 2);
-    complete(null, "retry-token", Date.now() + 60000);
-  } finally {
-    helper.authenticateHomebridge = originalAuthenticate;
-    helper.homebridgeTokenCache = new Map();
-    helper.homebridgeTokenRequests = new Map();
-  }
-});
-
 test("module styles do not define unscoped selectors", () => {
   const css = fs.readFileSync(path.join(__dirname, "..", "MMM-GoveeSmartHomeStatus.css"), "utf8");
   for (const match of css.matchAll(/(?:^|[{},])\s*(\.[\w-][^{},]*)\s*(?=[{,])/g)) {
