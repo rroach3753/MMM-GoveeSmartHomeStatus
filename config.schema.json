@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rroach3753/MMM-GoveeSmartHomeStatus/main/config.schema.json",
+  "title": "MMM-GoveeSmartHomeStatus configuration",
+  "description": "Browser-side configuration for MMM-GoveeSmartHomeStatus. Server credentials and automation policy are environment-only.",
+  "type": "object",
+  "properties": {
+    "title": { "type": "string", "default": "Govee Devices" },
+    "refreshInterval": { "type": "number", "minimum": 0, "default": 480000 },
+    "showOnlineOnly": { "type": "boolean", "default": false },
+    "showPower": { "type": "boolean", "default": true },
+    "showTemperature": { "type": "boolean", "default": true },
+    "showHumidity": { "type": "boolean", "default": true },
+    "showLightsSummary": { "type": "boolean", "default": true },
+    "showRoomSummary": { "type": "boolean", "default": true },
+    "roomSummaryLightsOnly": { "type": "boolean", "default": false },
+    "lightDetectionKeywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["light", "lamp", "bulb", "strip", "led"]
+    },
+    "hideAppliances": { "type": "boolean", "default": true },
+    "hiddenApplianceKeywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["ice maker", "icemaker", "refrigerator", "fridge"]
+    },
+    "roomNameDelimiter": { "type": "string", "default": " - " },
+    "cloudDeviceListRefreshInterval": { "type": "number", "minimum": 0, "default": 0 },
+    "cloudDeviceStateRefreshInterval": { "type": "number", "minimum": 0, "default": 0 },
+    "fullWidthBottomBar": { "type": "boolean", "default": false },
+    "compactCards": { "type": "boolean", "default": false },
+    "maxCompactCards": { "type": "integer", "minimum": 1, "default": 12 },
+    "groupCompactCardsByRoom": { "type": "boolean", "default": true },
+    "compactRoomCardAlignment": {
+      "type": "string",
+      "enum": ["rows", "block", "vertical", "both"],
+      "default": "rows"
+    },
+    "shortenGroupedDeviceNames": { "type": "boolean", "default": true },
+    "showCountsInRoomHeaders": { "type": "boolean", "default": true },
+    "hideRoomSummaryWhenGrouped": { "type": "boolean", "default": true },
+    "roomOrder": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "emptyMessage": { "type": "string", "default": "No devices available." },
+    "loadingMessage": { "type": "string", "default": "Loading Govee devices..." },
+    "noApiKeyMessage": { "type": "string", "default": "API key not configured." },
+    "errorMessage": { "type": "string", "default": "Error fetching Govee device data." },
+    "showPowerConsumption": { "type": "boolean", "default": true }
+  },
+  "additionalProperties": false
+}

@@ -194,6 +194,11 @@ display-control, and outlet auto-off variables.
 
 ## Configuration Options
 
+The [`config.schema.json`](./config.schema.json) file provides validation,
+completion, and default-value hints for the browser-side module `config`
+object. Server credentials, LAN policy, Homebridge access, and presence
+automation remain process environment settings and are intentionally excluded.
+
 | Option | Type | Description | Default |
 | -------- | ------ | ------------- | --------- |
 | `title` | String | Module title | `"Govee Devices"` |
