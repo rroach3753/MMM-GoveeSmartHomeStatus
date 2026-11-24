@@ -139,8 +139,37 @@ test("display turns off only after continuous all-clear and wakes on any presenc
     harness.time(315000);
     await harness.poll();
     assert.deepEqual(harness.writes, [false, true]);
+    await harness.poll();
+    assert.deepEqual(harness.writes, [false, true]);
   } finally {
     harness.controller.stop();
+  }
+});
+
+test("a new presence transition explicitly wakes a display even when status says on", async () => {
+  let readings = [{ name: "sensor", value: false, error: null }];
+  const writes = [];
+  const display = {
+    isOn: async () => true,
+    setPower: async (enabled) => { writes.push(enabled); },
+    close() {}
+  };
+  const controller = new PresenceController(
+    { offDelay: 300000, pollInterval: 15000 },
+    { read: async () => readings, close() {} },
+    display,
+    () => {},
+    () => 0
+  );
+  try {
+    await controller.poll();
+    clearTimeout(controller.timer);
+    readings = [{ name: "sensor", value: true, error: null }];
+    await controller.poll();
+    clearTimeout(controller.timer);
+    assert.deepEqual(writes, [true]);
+  } finally {
+    controller.stop();
   }
 });
 
